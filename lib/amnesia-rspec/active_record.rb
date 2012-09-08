@@ -23,7 +23,7 @@ module ActiveRecord
       alias_method_chain :type_to_sql, :notext
 
       def execute_with_stupid_cache(sql, name = nil)
-        @stupid_cache ||= RunWithFork.stupid_cache_for_ar
+        @stupid_cache ||= Amnesia.stupid_cache_for_ar
         return @stupid_cache[sql] if @stupid_cache[sql]
         begin
           result = execute_without_stupid_cache(sql, name)
@@ -49,7 +49,7 @@ module ActiveRecord
       alias_method_chain :execute, :stupid_cache
 
       def cache_schema_info!
-        @stupid_cache ||= RunWithFork.stupid_cache_for_ar
+        @stupid_cache ||= Amnesia.stupid_cache_for_ar
         execute("SHOW TABLES").each do |table|
           ['SHOW FIELDS FROM', 'describe'].each do |query|
             query += " `#{table[0]}`"

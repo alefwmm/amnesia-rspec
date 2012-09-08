@@ -1,9 +1,11 @@
+require 'cod'
+
 module Amnesia
   class CodProxy < BasicObject
     def initialize(target)
       #puts "[#{Process.pid}] Building proxy for #{target.inspect}"
       @target = target
-      @pipe = Cod::Pipe.new(nil, IO.pipe("binary"))
+      @pipe = ::Cod::Pipe.new(nil, ::IO.pipe("binary"))
       @pipe.instance_eval do
         class << @pipe # The Cod::IOPair instance for this Cod::Pipe
           def write(buf)
@@ -25,7 +27,7 @@ module Amnesia
 
     def method_missing(*args)
       args.map! do |obj|
-        if obj.is_a? RSpec::Core::Example
+        if obj.is_a? ::RSpec::Core::Example
           obj.dup.tap do |example|
             example.instance_eval do
               # Get rid of junk we can't or don't want to serialize
@@ -51,7 +53,7 @@ module Amnesia
           #puts "[#{Process.pid}] Got: " + args.inspect
           @target.send(*args)
         end
-      rescue Cod::ConnectionLost
+      rescue ::Cod::ConnectionLost
       end
     end
   end

@@ -12,7 +12,7 @@ module Amnesia
     @webkit_sessions = {}
     @default_session = Capybara::Session.new(Capybara.default_driver, Capybara.app).tap {|s| s.driver} # Driver is lazy-loaded
 
-    MAX_PARALLEL.times do |i|
+    Config.max_workers.times do |i|
       @token = :"token_#{i}"
       # Clear port each time or it'll keep trying to use the same one
       Capybara.run_server = false
@@ -52,7 +52,7 @@ end
 
 RSpec.configure do |config|
   config.before(:really_each) do
-    RunWithFork.start_session(example.metadata[:js] && :webkit)
+    Amnesia.start_session(example.metadata[:js] && :webkit)
   end
 end
 
@@ -68,7 +68,7 @@ module Capybara
   class Server
     # Just assume they work, because we're going to actually finish booting them after when Capy would check
     def responsive_with_preload?
-      if RunWithFork.current_session
+      if Amnesia.current_session
         responsive_without_preload?
       else
         true
@@ -78,7 +78,7 @@ module Capybara
   end
 
   def self.current_session
-    RunWithFork.current_session
+    Amnesia.current_session
   end
 end
 

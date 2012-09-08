@@ -12,7 +12,7 @@ module Amnesia
     Config.enabled = true
     yield Config
 
-    raise "Amnesia max workers set to #{@max_workers}" unless @max_workers > 0
+    raise "Amnesia max workers set to #{Config.max_workers}" unless Config.max_workers > 0
 
     # Stuff of our own; no point loading unless we're running
     require 'amnesia-rspec/cod_proxy'
@@ -46,7 +46,7 @@ module Amnesia
     ActiveRecord::Base.connection.cache_schema_info!
     Dir[Rails.root.join("spec/factories/**/*.rb")].each { |f| load f }
     FixtureHelpers.reload_fixtures
-    RunWithFork.init_sessions
+    Amnesia.init_sessions
   end
 
   def self.safe_write
@@ -60,14 +60,14 @@ module Amnesia
 
   def self.wait
     @token = @counter_out.get
-    puts "[#{Process.pid}] #{self} got token" if DEBUG_CHILDREN
+    puts "[#{Process.pid}] #{self} got token" if Config.debug
   end
 
   def self.signal
     raise "Don't have a token!" unless @token
     @counter_in.put @token
     @token = nil
-    puts "[#{Process.pid}] #{self} put token" if DEBUG_CHILDREN
+    puts "[#{Process.pid}] #{self} put token" if Config.debug
   end
 
   # This is needed so that once the original parent exits, all the children get killed too, not left hanging around
