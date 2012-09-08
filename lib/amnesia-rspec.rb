@@ -1,53 +1,52 @@
 require "amnesia-rspec/version"
+require "amnesia-rspec/rspec_hooks" # Always need to patch RSpec a little, to enable :really_each
 
 module Amnesia
   class Config
     class << self
       attr_accessor :enabled, :max_workers, :debug
-
-      @enabled = !!ENV['AMNESIA']
-      @max_workers = [ENV['AMNESIA'].to_i, 1].max
     end
   end
 
-  def self.forkit_and_forget
-    # Always need to patch RSpec at least a little, to enable :really_each
+  def self.forkit_and_forget!
+    Config.enabled = true
+    yield Config
+
+    raise "Amnesia max workers set to #{@max_workers}" unless @max_workers > 0
+
+    # Stuff of our own; no point loading unless we're running
+    require 'amnesia-rspec/cod_proxy'
+    require 'amnesia-rspec/run_with_fork'
+
+    # Monkeypatch away!
+    require 'amnesia-rspec/active_record'
     require 'amnesia-rspec/rspec'
+    require 'amnesia-rspec/capybara'
+    require 'amnesia-rspec/factory_girl'
 
-    if Config.enabled
-      # Stuff of our own; no point loading unless we're running
-      require 'amnesia-rspec/cod_proxy'
-      require 'amnesia-rspec/run_with_fork'
+    ######## Initialize singleton stuff
 
-      # Monkeypatch away!
-      require 'amnesia-rspec/active_record'
-      require 'amnesia-rspec/capybara'
-      require 'amnesia-rspec/factory_girl'
+    @lockfile = Tempfile.new("amnesia.lock")
 
-      ######## Initialize singleton stuff
+    # Important to use :DGRAM here so don't get more than one token out per read
+    # Probably no real need for Cod here
+    @counter_in = Cod::Pipe.new(nil, Socket.socketpair(:UNIX, :DGRAM, 0))
+    @counter_out = @counter_in.dup
 
-      @lockfile = Tempfile.new("amnesia.lock")
+    @killpipe_r, @killpipe_w = IO.pipe
+    @iopipe_r, @iopipe_w = IO.pipe
 
-      # Important to use :DGRAM here so don't get more than one token out per read
-      # Probably no real need for Cod here
-      @counter_in = Cod::Pipe.new(nil, Socket.socketpair(:UNIX, :DGRAM, 0))
-      @counter_out = @counter_in.dup
-
-      @killpipe_r, @killpipe_w = IO.pipe
-      @iopipe_r, @iopipe_w = IO.pipe
-
-      RSpec.configure do |config|
-        if Spork.using_spork?
-          config.output_stream = config.error_stream = IO.for_fd(2, "a")
-        end
+    RSpec.configure do |config|
+      if Spork.using_spork?
+        config.output_stream = config.error_stream = IO.for_fd(2, "a")
       end
-
-      load "#{Rails.root.to_s}/db/schema.rb"
-      ActiveRecord::Base.connection.cache_schema_info!
-      Dir[Rails.root.join("spec/factories/**/*.rb")].each { |f| load f }
-      FixtureHelpers.reload_fixtures
-      RunWithFork.init_sessions
     end
+
+    load "#{Rails.root.to_s}/db/schema.rb"
+    ActiveRecord::Base.connection.cache_schema_info!
+    Dir[Rails.root.join("spec/factories/**/*.rb")].each { |f| load f }
+    FixtureHelpers.reload_fixtures
+    RunWithFork.init_sessions
   end
 
   def self.safe_write
