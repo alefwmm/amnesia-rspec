@@ -1,7 +1,7 @@
 require 'cod'
 
 module Amnesia
-  class CodProxy < BasicObject
+  class CodProxy
     def initialize(target)
       #puts "[#{Process.pid}] Building proxy for #{target.inspect}"
       @target = target
@@ -31,7 +31,7 @@ module Amnesia
           obj.dup.tap do |example|
             example.instance_eval do
               # Get rid of junk we can't or don't want to serialize
-              @example_block = @example_group_instance = nil
+              @example_block = @example_group_instance = @around_hooks = nil
               # Do it this way to trigger lazy generation
               @metadata = [:description, :full_description, :execution_result, :file_path, :pending, :location].each_with_object({}) do |k, h|
                 h[k] = @metadata[k]
@@ -42,8 +42,12 @@ module Amnesia
           obj
         end
       end
-      #puts "[#{Process.pid}] Put: " + args.inspect
-      @pipe.put(args)
+      begin
+        @pipe.put(args)
+      rescue => ex
+        puts "[#{Process.pid}] Error putting: " + args.inspect
+        raise ex
+      end
     end
 
     def run_proxy_to_end

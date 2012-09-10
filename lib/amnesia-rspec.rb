@@ -50,12 +50,15 @@ module Amnesia
   end
 
   def self.safe_write
-    # Each child needs its own FD for lock to be effective, so just open it newly each time
-    File.open(@lockfile.path, "r") do |f|
-      f.flock(File::LOCK_EX)
-      yield
-      f.flock(File::LOCK_UN)
-    end
+    # Time limit this to avoid/detect deadlocks
+    #Timeout::timeout(5) do
+      # Each child needs its own FD for lock to be effective, so just open it newly each time
+      File.open(@lockfile.path, "r") do |f|
+        f.flock(File::LOCK_EX)
+        yield
+        f.flock(File::LOCK_UN)
+      end
+    #end
   end
 
   def self.wait
