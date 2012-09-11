@@ -14,20 +14,18 @@ module RSpec
       #end
 
       # In the new fork order, there's no distinction between :each and :all
-      def scope_and_options_from_with_no_each(*args)
+      def before(*args, &block)
         if args[0] == :really_each
+          really_each = true
           args[0] = :each
-          scope_and_options_from_without_no_each(*args)
+        end
+        scope, options = scope_and_options_from(*args)
+        if scope == :each && !really_each && Amnesia::Config.enabled && Amnesia::Config.before_optimization && !metadata[:disable_before_optimization]
+          hooks[:before][:all] << BeforeHook.new(options, &block)
         else
-          scope, options = scope_and_options_from_without_no_each(*args)
-          if false && Amnesia::Config.enabled
-            return scope == :each ? :all : scope, options
-          else
-            return scope, options
-          end
+          hooks[:before][scope] << BeforeHook.new(options, &block)
         end
       end
-      alias_method_chain :scope_and_options_from, :no_each
     end
   end
 end

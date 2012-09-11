@@ -1,4 +1,5 @@
 require 'unicorn'
+require 'amnesia-rspec/server'
 
 module Amnesia
   def self.init_sessions
@@ -10,14 +11,18 @@ module Amnesia
     @headless.start
 
     @webkit_sessions = {}
+    @servers = {}
     @default_session = Capybara::Session.new(Capybara.default_driver, Capybara.app).tap {|s| s.driver} # Driver is lazy-loaded
 
     Config.max_workers.times do |i|
       @token = :"token_#{i}"
-      # Clear port each time or it'll keep trying to use the same one
-      Capybara.run_server = false
+      Capybara::Server.instance_eval { @ports = {} } # Reset each time or it'll pick the same port
       @webkit_sessions[@token] = Capybara::Session.new(:webkit, Capybara.app).tap {|s| s.driver} # Driver is lazy-loaded
       @counter_in.put @token
+      until @servers[@token]
+        puts "Waiting for server to register for #{@token}"
+        sleep 0.01
+      end
     end
     @token = nil
   end
@@ -26,21 +31,80 @@ module Amnesia
     @headless.destroy
   end
 
+  def self.register_server(app, port)
+    @servers[@token] = Amnesia::Server.new(app, port)
+    puts "Server registered for #{@token}"
+  end
+
   def self.start_session(mode = nil)
     if mode == :webkit
+      @server = @servers[@token]
+      @server.start
       @session = @webkit_sessions[@token]
       @session.reset!
       orig = $0
-      $0 = "ruby #{self} waiting for server"
-      @session.driver.instance_eval { @rack_server.boot }
+      $0 = "#{$0} waiting for server"
+      while true
+        begin
+          if @session.driver.instance_eval { @rack_server.responsive? }
+            break
+          end
+        rescue => ex
+          puts "[#{Process.pid}] Error while waiting for server: #{ex}"
+        end
+        puts "Waiting for server.."
+        sleep 0.02
+      end
       $0 = orig
+      restore_external_session_state
     else
       @session = @default_session
     end
   end
 
+  def self.stop_session
+    @server.stop if @server
+    @session = @server = nil
+  end
+
+  # Actually, we want to save this for rack_test, too, so "external" is misleading; but we restore it externally to webkit
+  def self.save_external_session_state
+    if @session
+      @previous_url = @session.current_path if @session.driver.current_url
+      if @session == @default_session
+        @previous_cookies = @session.driver.browser.current_session.instance_eval {@rack_mock_session.cookie_jar}.to_hash.map do |k, v|
+          "#{k}=#{v}; HttpOnly; domain=127.0.0.1; path=/"
+        end
+      else
+        @previous_cookies = @session.driver.browser.get_cookies
+      end
+      #puts "Saved path: #{@previous_url}"
+    end
+  end
+
+  def self.restore_external_session_state
+    if @previous_cookies
+      #puts "Had cookies: #{@session.driver.browser.get_cookies.inspect}"
+      #puts "Restoring cookies: \n\t#{@previous_cookies.join("\n\t")}"
+      @previous_cookies.each {|c| @session.driver.browser.set_cookie(c)}
+      #puts "Have cookies: #{@session.driver.browser.get_cookies.inspect}"
+    end
+    if @previous_url
+      #puts "Restoring path: #{@previous_url}"
+      begin
+        @session.driver.visit @previous_url
+      rescue Capybara::Driver::Webkit::WebkitInvalidResponseError => ex
+        puts "Warning: error restoring URL '#{@previous_url}': #{ex}"
+      end
+    end
+  end
+
   def self.current_session
     @session
+  end
+
+  def self.javascript?
+    @session && @session != @default_session
   end
 
   class AlwaysEqual
@@ -49,6 +113,25 @@ module Amnesia
     end
   end
 end
+
+# This is a whole bunch of retardedness to fix the fact that set_cookie always prepends a ., thereby interfering
+# with Rails's ability to subsequently overwrite restored cookies ::facepalm::
+class CookieFixerApp
+  def initialize(app)
+    @app = app
+  end
+
+  def call(env)
+    result = @app.call(env)
+    if Amnesia.javascript? && result[1]["Set-Cookie"]
+      #puts result[1]["Set-Cookie"]
+      result[1]["Set-Cookie"].gsub!(/; HttpOnly/, "; domain=.127.0.0.1; HttpOnly")
+      #puts result[1]["Set-Cookie"]
+    end
+    result
+  end
+end
+Capybara.app = CookieFixerApp.new(Capybara.app)
 
 RSpec.configure do |config|
   config.before(:really_each) do
@@ -83,17 +166,39 @@ module Capybara
 end
 
 Capybara.server do |app, port|
-  server = Unicorn::HttpServer.new(app)
-  server.logger.level = Logger::WARN
-  server.listen(port)
-  class << server
-    def master_pid # Must always == Process.ppid or worker loop will freak out and return
-      Amnesia::AlwaysEqual.new
+  begin
+    Amnesia.register_server(app, port)
+  rescue => ex
+    puts ex
+    puts ex.backtrace
+  end
+end
+
+class Capybara::Driver::Webkit
+  class Browser
+    # Prevent from hanging indefinitely on read from browser
+    def check_with_timeout
+      Timeout::timeout(90) do
+        check_without_timeout
+      end
+    end
+    alias_method_chain :check, :timeout
+  end
+
+  # current_url will fail if we haven't visited anything, so keep track of whether we have
+  def current_url_with_safety
+    if @last_visited
+      current_url_without_safety
     end
   end
-  server.instance_eval do
-    worker_loop(Unicorn::Worker.new(1))
-    puts "Worker exited, WTF!!"
+  def visit_with_safety(path)
+    @last_visited = path
+    visit_without_safety(path)
   end
+  def reset_with_safety!
+    @last_visited = nil
+    reset_without_safety!
+  end
+  [:current_url, :visit, :reset!].each {|m| alias_method_chain m, :safety}
 end
 

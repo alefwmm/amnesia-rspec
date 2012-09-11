@@ -1,8 +1,10 @@
 module Amnesia
   module RunWithFork
     def run_with_fork(options = {})
+      include Amnesia::Logging
+
       define_method :run_with_child do |*args, &block|
-        puts "[#{Process.pid}] #{self} run_with_child" if Config.debug
+        debug_state "run_with_child"
         if options[:master]
           GC.disable
           proxy = CodProxy.new(self) # reporter
@@ -11,49 +13,35 @@ module Amnesia
           end
           Amnesia.run_iopipe if Spork.using_spork?
           #puts "***************** First fork *******************"
+        else # If we're not in charge here, we need a token to run
+          debug_state "waiting for token"
+          Amnesia.wait(options[:example] ? 0 : 1) # Higher priority for examples than example groups
         end
-        if options[:counts_against_total]
-          puts "[#{Process.pid}] #{self} waiting for signal" if Config.debug
-          $0 = "ruby #{self} waiting for signal"
-          Amnesia.wait
-        end
-        if child = Process.fork # Parent
-          if proxy # Root level process receiving results
-            Process.detach(child)
-            puts "[#{Process.pid}] #{self} parent waiting for proxy" if Config.debug
-            $0 = "ruby #{self} waiting for proxy"
-            proxy.run_proxy_to_end
-            Amnesia.cleanup
-          elsif options[:counts_against_total]
-            puts "[#{Process.pid}] #{self} parent setting child free" if Config.debug
-            Process.detach(child)
-            sleep 0.001 # If we exit immediately after detaching, seems to crash
-          else
-            puts "[#{Process.pid}] #{self} parent waiting for child" if Config.debug
-            $0 = "ruby #{self} waiting for child"
-            Process.wait(child)
-          end
-          puts "[#{Process.pid}] #{self} parent resuming" if Config.debug
-          $0 = "ruby #{self} resumed"
-        else # Child
+        debug_state "parent starting child"
+        Amnesia.in_child do
           begin
             if Spork.using_spork?
               $stdout = STDOUT.reopen(Amnesia.output)
               $stderr = STDERR.reopen(Amnesia.output)
             end
-            Amnesia.monitor_parent
-            puts "[#{Process.pid}] #{self} child starting" if Config.debug
-            $0 = "ruby #{self}"
+            debug_state "child started"
             run_without_child(*args, &(proxy_block || block))
-            puts "[#{Process.pid}] #{self} child finished" if Config.debug
+            debug_state "child finished"
           rescue => ex
             puts [ex.inspect, ex.backtrace].join("\n\t")
           ensure
-            puts "[#{Process.pid}] #{self} child exiting" if Config.debug
-            Amnesia.signal if options[:counts_against_total]
+            debug_state "child exiting"
+            Amnesia.signal
             exit!(true)
           end
         end
+        # Parent
+        if proxy # Root level process receiving results
+          debug_state "parent waiting for proxy"
+          proxy.run_proxy_to_end
+          Amnesia.cleanup
+        end
+        debug_state "parent resumed"
       end
       alias_method_chain :run, :child
     end

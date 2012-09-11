@@ -1,17 +1,49 @@
 module RSpec
   module Core
     class ExampleGroup
+      def initialize
+        if Amnesia::Config.before_optimization
+          # Provide a way for :each blocks to check out metadata as if in an example when running before(:all)
+          klass = self.class
+          @example = Object.new.tap do |obj|
+            obj.define_singleton_method(:metadata) do
+              klass.metadata
+            end
+            obj.define_singleton_method(:example_group) do
+              klass
+            end
+          end
+
+          # Setup up render notifications in case a new render happens in example, before ivars are populated with
+          # previous results from earlier before blocks
+          setup_subscriptions if respond_to?(:setup_subscriptions)
+        end
+      end
+
       class << self
         extend Amnesia::RunWithFork
         run_with_fork
 
         def run_before_all_hooks_with_mocks(example_group_instance)
           #puts "[#{Process.pid}] #{self} before_all_hooks start"
-          example_group_instance.setup_mocks_for_rspec # Normally happens in example#run_before_each, but need it here for each->all converted blocks
+
+          if Amnesia::Config.before_optimization && !example_group_instance.class.metadata[:disable_before_optimization]
+            # Normally happens in example#run_before_each, but need it here for each->all converted blocks
+            example_group_instance.setup_mocks_for_rspec
+
+            # really_each blocks should always be set up at every nesting level to allow before each stuff to work
+            world.run_hook_filtered(:before, :each, self, example_group_instance)
+          end
+
           run_before_all_hooks_without_mocks(example_group_instance)
           #puts "[#{Process.pid}] #{self} before_all_hooks done"
         end
         alias_method_chain :run_before_all_hooks, :mocks
+
+        #def run_before_each_hooks_with_hacks(example)
+        #  run_before_each_hooks_without_hacks(example)
+        #end
+        #alias_method_chain :run_before_each_hooks, :hacks
 
         # Skip it, gonna exit() momentarily
         def run_after_all_hooks(example_group_instance)
@@ -22,7 +54,7 @@ module RSpec
 
     class Example
       extend Amnesia::RunWithFork
-      run_with_fork counts_against_total: true
+      run_with_fork example: true
 
       # Don't need to do after stuff aside from verifying mocks, will exit() shortly
       def run_after_each

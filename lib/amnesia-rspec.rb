@@ -1,10 +1,13 @@
 require "amnesia-rspec/version"
+require "amnesia-rspec/logging"
 require "amnesia-rspec/rspec_hooks" # Always need to patch RSpec a little, to enable :really_each
 
 module Amnesia
+  extend Logging
+
   class Config
     class << self
-      attr_accessor :enabled, :max_workers, :debug
+      attr_accessor :enabled, :max_workers, :debug, :debug_server, :before_optimization
     end
   end
 
@@ -54,23 +57,48 @@ module Amnesia
     #Timeout::timeout(5) do
       # Each child needs its own FD for lock to be effective, so just open it newly each time
       File.open(@lockfile.path, "r") do |f|
+        orig = $0
+        $0 = "#{orig} waiting for lock"
         f.flock(File::LOCK_EX)
+        $0 = "#{orig} holding lock"
         yield
+        $0 = "#{orig} releasing lock"
         f.flock(File::LOCK_UN)
+        $0 = orig
       end
     #end
   end
 
-  def self.wait
-    @token = @counter_out.get
-    puts "[#{Process.pid}] #{self} got token" if Config.debug
+  def self.wait(nice = 0)
+    unless @token
+      @token = @counter_out.get
+      # If we're being nice, give someone else a chance first
+      nice.times do
+        @counter_in.put @token
+        sleep 0.001
+        @token = @counter_out.get
+      end
+      puts "[#{Process.pid}] #{self} got token" if Config.debug
+    end
   end
 
   def self.signal
-    raise "Don't have a token!" unless @token
+    return unless @token
+    stop_session # Make sure we're not going to accept any connections after putting token
     @counter_in.put @token
     @token = nil
     puts "[#{Process.pid}] #{self} put token" if Config.debug
+  end
+
+  def self.in_child
+    save_external_session_state
+    stop_session
+    child = Process.fork do
+      monitor_parent
+      yield
+    end
+    @token = nil
+    Process.detach(child)
   end
 
   # This is needed so that once the original parent exits, all the children get killed too, not left hanging around
