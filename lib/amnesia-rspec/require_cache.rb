@@ -1,6 +1,6 @@
 module Amnesia
   class RequireCache
-    @filename = '.amnesia_require_cache'
+    @filename = Config.require_cache
 
     def self.activate!
       load @filename if File.exists?(@filename)

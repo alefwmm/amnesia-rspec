@@ -6,7 +6,7 @@ module Amnesia
       define_method :run_with_child do |*args, &block|
         debug_state "run_with_child"
         if options[:master]
-          if Config.use_require_cache
+          if Config.require_cache
             require 'amnesia-rspec/require_cache'
             RequireCache.activate!
           end
