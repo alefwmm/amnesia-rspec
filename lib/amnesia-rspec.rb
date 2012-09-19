@@ -1,15 +1,10 @@
 require "amnesia-rspec/version"
+require "amnesia-rspec/config"
 require "amnesia-rspec/logging"
 require "amnesia-rspec/rspec_hooks" # Always need to patch RSpec a little, to enable :really_each
 
 module Amnesia
   extend Logging
-
-  class Config
-    class << self
-      attr_accessor :enabled, :max_workers, :debug, :debug_server, :before_optimization
-    end
-  end
 
   def self.forkit_and_forget!
     Config.enabled = true
@@ -57,14 +52,14 @@ module Amnesia
     #Timeout::timeout(5) do
       # Each child needs its own FD for lock to be effective, so just open it newly each time
       File.open(@lockfile.path, "r") do |f|
-        orig = $0
-        $0 = "#{orig} waiting for lock"
+        #orig = $0
+        #$0 = "#{orig} waiting for lock"
         f.flock(File::LOCK_EX)
-        $0 = "#{orig} holding lock"
+        #$0 = "#{orig} holding lock"
         yield
-        $0 = "#{orig} releasing lock"
+        #$0 = "#{orig} releasing lock"
         f.flock(File::LOCK_UN)
-        $0 = orig
+        #$0 = orig
       end
     #end
   end
@@ -134,17 +129,6 @@ module Amnesia
     @iopipe_w
   end
 end
-
-#Kernel.class_eval do
-#  def load_with_noise(*args)
-#    puts "Load: " + args.inspect if load_without_noise(*args)
-#  end
-#  alias_method_chain :load, :noise
-#  def require_with_noise(*args)
-#    puts "Require: " + args.inspect if require_without_noise(*args)
-#  end
-#  alias_method_chain :require, :noise
-#end
 
 
 

@@ -26,6 +26,9 @@ module Amnesia
     end
 
     def method_missing(*args)
+      # Proxying things that we don't really care about slows us down; also, screws up Teamcity which is expecting 1 thread
+      return if [:example_group_started, :example_group_finished].include?(args[0])
+      #puts "Proxying: #{args[0]}"
       args.map! do |obj|
         if obj.is_a? ::RSpec::Core::Example
           obj.dup.tap do |example|
