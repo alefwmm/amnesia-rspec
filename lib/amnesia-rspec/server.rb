@@ -39,6 +39,12 @@ module Amnesia
       @thread = nil
     end
 
+    def clear
+      while @socket.kgio_tryaccept
+        puts "[#{Process.pid}] {#{@port}} discarding request in #{@thread.inspect}" #if Config.debug_server
+      end
+    end
+
     private
     def run_loop
       begin
@@ -64,7 +70,11 @@ module Amnesia
           end while true
         end
       rescue Stop
-        puts "[#{Process.pid}] {#{port}} exiting from loop in #{@thread}" if Config.debug_server
+        # Make sure we're not leaving behind any crap that will be in the front of the queue for a child process
+        # Doesn't seem to be necessary, but can't hurt, right?
+        clear
+
+        puts "[#{Process.pid}] {#{port}} exiting from loop in #{@thread.inspect}" if Config.debug_server
       end
     end
   end

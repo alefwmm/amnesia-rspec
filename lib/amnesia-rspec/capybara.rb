@@ -41,7 +41,6 @@ module Amnesia
       @server = @servers[@token]
       @server.start
       @session = @webkit_sessions[@token]
-      @session.reset!
       orig = $0
       $0 = "#{$0} waiting for server"
       while true
@@ -63,8 +62,13 @@ module Amnesia
   end
 
   def self.stop_session
-    @server.stop if @server
-    @session = @server = nil
+    if javascript?
+      @server.stop
+      @session.reset! # For some reason this only works if we stop the server FIRST
+      @server.clear # Doesn't seem to be necessary, but can't hurt either
+      @server = nil
+    end
+    @session = nil
   end
 
   # Actually, we want to save this for rack_test, too, so "external" is misleading; but we restore it externally to webkit
@@ -122,6 +126,7 @@ class CookieFixerApp
   end
 
   def call(env)
+    #puts "[#{Process.pid}] #{env['PATH_INFO']}"
     result = @app.call(env)
     if Amnesia.javascript? && result[1]["Set-Cookie"]
       #puts result[1]["Set-Cookie"]
