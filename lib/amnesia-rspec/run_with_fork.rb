@@ -6,6 +6,7 @@ module Amnesia
       define_method :run_with_child do |*args, &block|
         debug_state "run_with_child"
         if options[:master]
+          logging_with(self)
           if Config.require_cache
             require 'amnesia-rspec/require_cache'
             RequireCache.activate!
@@ -21,11 +22,12 @@ module Amnesia
           #puts "***************** First fork *******************"
         else # If we're not in charge here, we need a token to run
           debug_state "waiting for token"
-          Amnesia.wait(options[:example] ? 0 : 1) # Higher priority for examples than example groups
+          Amnesia.wait
         end
         debug_state "parent starting child"
         Amnesia.in_child do
           begin
+            logging_with(self)
             if Spork.using_spork?
               $stdout = STDOUT.reopen(Amnesia.output)
               $stderr = STDERR.reopen(Amnesia.output)

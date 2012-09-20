@@ -15,14 +15,14 @@ module Amnesia
     @default_session = Capybara::Session.new(Capybara.default_driver, Capybara.app).tap {|s| s.driver} # Driver is lazy-loaded
 
     Config.max_workers.times do |i|
-      @token = :"token_#{i}"
+      @token = "token_#{i}"
       Capybara::Server.instance_eval { @ports = {} } # Reset each time or it'll pick the same port
       @webkit_sessions[@token] = Capybara::Session.new(:webkit, Capybara.app).tap {|s| s.driver} # Driver is lazy-loaded
-      @counter_in.put @token
       until @servers[@token]
         puts "Waiting for server to register for #{@token}"
         sleep 0.01
       end
+      seed_token @token
     end
     @token = nil
   end

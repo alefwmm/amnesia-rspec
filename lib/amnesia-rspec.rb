@@ -26,11 +26,6 @@ module Amnesia
 
     @lockfile = Tempfile.new("amnesia.lock")
 
-    # Important to use :DGRAM here so don't get more than one token out per read
-    # Probably no real need for Cod here
-    @counter_in = Cod::Pipe.new(nil, Socket.socketpair(:UNIX, :DGRAM, 0))
-    @counter_out = @counter_in.dup
-
     @killpipe_r, @killpipe_w = IO.pipe
     @iopipe_r, @iopipe_w = IO.pipe
 
@@ -64,31 +59,94 @@ module Amnesia
     #end
   end
 
-  def self.wait(nice = 0)
+  def self.add_token_channel
+    @token_out_channels ||= []
+    @token_in_channel.close if @token_in_channel # Only keep one per fork-level
+    @token_in_channel, s_out = Socket.socketpair(:UNIX, :DGRAM, 0)
+    @token_out_channels << s_out
+  end
+
+  def self.seed_token(token)
+    unless @token_out_channels
+      # Initialize the token setup
+      add_token_channel
+      @global_token_in_channel = @token_in_channel
+      @token_in_channel = nil # Avoid global channel being closed
+    end
+    @token_out_channels.first.send(token, 0)
+  end
+
+  MAX_TOKEN_LEN = 10
+
+  def self.wait
     unless @token
-      @token = @counter_out.get
-      # If we're being nice, give someone else a chance first
-      nice.times do
-        @counter_in.put @token
-        sleep 0.001
-        @token = @counter_out.get
+      begin
+        ready = IO.select([@token_in_channel, @global_token_in_channel])[0]
+        if ready.length == 2
+          # Prefer local token if available
+          channel = @token_in_channel
+        else
+          channel = ready.first
+        end
+        @token = channel.recv_nonblock(MAX_TOKEN_LEN)
+      rescue Errno::EAGAIN
+        retry
       end
-      puts "[#{Process.pid}] #{self} got token" if Config.debug
+      debug "got token #{@token} from #{channel.inspect}" if Config.debug
     end
   end
 
   def self.signal
-    return unless @token
-    stop_session # Make sure we're not going to accept any connections after putting token
-    @counter_in.put @token
-    @token = nil
-    puts "[#{Process.pid}] #{self} put token" if Config.debug
+    begin
+      stop_session # Make sure we're not going to accept any connections after putting token
+      # We're done working, check for any tokens on our private incoming channel, then close it
+      tokens = [@token].compact
+      begin
+        while token = @token_in_channel.recv_nonblock(MAX_TOKEN_LEN)
+          if token.length > 0
+            tokens << token
+            debug "found token #{token} in #{@token_in_channel.inspect}" if Config.debug
+          else
+            break
+          end
+        end
+      rescue Errno::EAGAIN
+      end
+      @token_in_channel.close
+      # Pass our first token upstream as little as possible, but not to ourselves
+      @token_out_channels.pop
+      begin
+        out = @token_out_channels.pop
+        while tokens.length > 0
+          token = tokens.first
+          debug "putting token #{token} into #{out.inspect}" if Config.debug
+          out.send(token, 0)
+          tokens.shift
+          # Successfully sent one, now try to send rest to either top-level child or global
+          if @token_out_channels.length > 1
+            out = @token_out_channels[1] # Channel for top-level child
+            @token_out_channels.slice!(0,1) # Only try global on next retry
+          end
+        end
+      rescue Errno::ECONNRESET, Errno::EDESTADDRREQ => ex
+        debug "#{ex.inspect}" if Config.debug
+        if @token_out_channels.length > 0
+          retry
+        else
+          raise "WTF, ran out of places to put a token!"
+        end
+      end
+    rescue => ex
+      puts "[#{Process.pid}] #{ex.inspect}"
+      puts ex.backtrace
+    end
   end
 
   def self.in_child
     save_external_session_state
     stop_session
     child = Process.fork do
+      add_token_channel
       monitor_parent
       yield
     end
@@ -106,7 +164,7 @@ module Amnesia
       begin
         @killpipe_r.read
       ensure
-        #puts "[#{Process.pid}] #{self} exiting, dead parent"
+        #debug "exiting, dead parent"
         exit!
       end
     end
