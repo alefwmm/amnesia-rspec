@@ -128,7 +128,7 @@ module Amnesia
             @token_out_channels.slice!(0,1) # Only try global on next retry
           end
         end
-      rescue Errno::ECONNRESET, Errno::EDESTADDRREQ => ex
+      rescue SystemCallError => ex
         debug "#{ex.inspect}" if Config.debug
         if @token_out_channels.length > 0
           retry
