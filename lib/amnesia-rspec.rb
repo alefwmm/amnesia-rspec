@@ -133,7 +133,7 @@ module Amnesia
         if @token_out_channels.length > 0
           retry
         else
-          raise "WTF, ran out of places to put a token!"
+          puts "[#{Process.pid}] Ran out of places to put a token! Was trying #{out.inspect} got: #{ex.inspect}"
         end
       end
     rescue => ex

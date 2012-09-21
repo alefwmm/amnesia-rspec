@@ -2,13 +2,14 @@ module RSpec
   module Core
     module Hooks
       #class Hook
+      #  include Amnesia::Logging
       #  def call
-      #    puts "#{display_name} #{@block.inspect}"
+      #    debug "#{display_name} #{@block.inspect}"
       #    @block.call
       #  end
       #
       #  def to_proc
-      #    puts "#{display_name} #{@block.inspect}"
+      #    debug "#{display_name} #{@block.inspect}"
       #    @block
       #  end
       #end

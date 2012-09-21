@@ -38,6 +38,7 @@ module Amnesia
 
   def self.start_session(mode = nil)
     if mode == :webkit
+      return if javascript? # Already set up
       @server = @servers[@token]
       @server.start
       @session = @webkit_sessions[@token]

@@ -47,7 +47,8 @@ module RSpec
 
         # Skip it, gonna exit() momentarily
         def run_after_all_hooks(example_group_instance)
-          #puts "[#{Process.pid}] #{self} after_all_hooks"
+          # Prevent the line after the one that calls us from nuking stuff, because we need it during the goofy RWF work cycle for last-children
+          before_all_ivars.define_singleton_method(:clear) {}
         end
       end
     end

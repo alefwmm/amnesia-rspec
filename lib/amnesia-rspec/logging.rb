@@ -18,7 +18,7 @@ module Amnesia
     end
 
     def debug(msg)
-      puts "#{Process.pid} #{Logging.prefix} #{msg}" if Config.debug
+      puts "[#{Process.pid}] #{Logging.prefix} #{msg}" if Config.debug
     end
 
     def debug_state(msg)

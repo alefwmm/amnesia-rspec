@@ -1,10 +1,55 @@
 module Amnesia
   module RunWithFork
+    class << self
+      include Logging
+
+      def register_work(&block)
+        raise "WTF" if @next_work
+        @next_work = block
+      end
+
+      def perform_work(in_child)
+        debug "performing work #{!!@next_work} (in_child = #{in_child})"
+        return unless work = @next_work
+        @next_work = nil
+        if in_child
+          debug_state "parent starting child"
+          Amnesia.in_child do
+            begin
+              if Spork.using_spork?
+                $stdout = STDOUT.reopen(Amnesia.output)
+                $stderr = STDERR.reopen(Amnesia.output)
+              end
+              work.call
+            rescue => ex
+              puts [ex.inspect, ex.backtrace].join("\n\t")
+            ensure
+              RunWithFork.perform_work(false) # Finish the last bit of registered work in the child
+              debug_state "child exiting"
+              Amnesia.signal
+              exit!(true)
+            end
+          end
+        else
+          begin
+            work.call
+          rescue => ex
+            puts [ex.inspect, ex.backtrace].join("\n\t")
+          ensure
+            RunWithFork.perform_work(false) # Finish the last bit of registered work in the child
+          end
+        end
+      end
+    end
+
     def run_with_fork(options = {})
       include Amnesia::Logging
 
       define_method :run_with_child do |*args, &block|
         debug_state "run_with_child"
+        # We've got more work to do, so fire off a child for any previous work
+        RunWithFork.perform_work(true)
+        
         if options[:master]
           logging_with(self)
           if Config.require_cache
@@ -24,32 +69,19 @@ module Amnesia
           debug_state "waiting for token"
           Amnesia.wait
         end
-        debug_state "parent starting child"
-        Amnesia.in_child do
-          begin
-            logging_with(self)
-            if Spork.using_spork?
-              $stdout = STDOUT.reopen(Amnesia.output)
-              $stderr = STDERR.reopen(Amnesia.output)
-            end
-            debug_state "child started"
-            run_without_child(*args, &(proxy_block || block))
-            debug_state "child finished"
-          rescue => ex
-            puts [ex.inspect, ex.backtrace].join("\n\t")
-          ensure
-            debug_state "child exiting"
-            Amnesia.signal
-            exit!(true)
-          end
+        debug "registering work for #{self}"
+        RunWithFork.register_work do
+          logging_with(self)
+          debug_state "working"
+          run_without_child(*args, &(proxy_block || block))
         end
         # Parent
         if proxy # Root level process receiving results
+          RunWithFork.perform_work(true) # Start the work we just registered in a child
           debug_state "parent waiting for proxy"
           proxy.run_proxy_to_end
           Amnesia.cleanup
         end
-        debug_state "parent resumed"
       end
       alias_method_chain :run, :child
     end
