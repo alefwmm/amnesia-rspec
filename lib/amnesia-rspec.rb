@@ -146,10 +146,12 @@ module Amnesia
     save_external_session_state
     stop_session
     child = Process.fork do
+      sleep 0.001 # Sleeping a moment after forking seems to avoid random crashes
       add_token_channel
       monitor_parent
       yield
     end
+    sleep 0.001 # Sleeping a moment after forking seems to avoid random crashes
     @token = nil
     Process.detach(child)
   end
