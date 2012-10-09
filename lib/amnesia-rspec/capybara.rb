@@ -66,7 +66,6 @@ module Amnesia
     if javascript?
       @server.stop
       @session.reset! # For some reason this only works if we stop the server FIRST
-      @server.clear # Doesn't seem to be necessary, but can't hurt either
       @server = nil
     end
     @session = nil

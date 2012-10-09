@@ -3,6 +3,7 @@ module Amnesia
     class Stop < Exception; end
 
     def initialize(app, port)
+      @mutex = Mutex.new
       @port = port
       @server = Unicorn::HttpServer.new(app)
       @server.logger.level = Logger::WARN
@@ -14,41 +15,60 @@ module Amnesia
     end
 
     def start
-      raise "WTF?!" if @thread
-      @thread = Thread.new do
-        begin
-          run_loop
-        rescue => ex
-          puts ex if Config.debug_server
-          puts ex.backtrace if Config.debug_server
+      @mutex.synchronize do
+        raise "WTF?!" if @thread
+        @thread = Thread.new do
+          begin
+            clear # Make sure not to process any leftover requests from after we last stopped
+            @stopping = @handling_request = false
+            run_loop
+          rescue => ex
+            puts ex #if Config.debug_server
+            puts ex.backtrace #if Config.debug_server
+          end
         end
       end
     end
 
     def stop
-      puts "[#{Process.pid}] {#{@port}} requesting stop for #{@thread.inspect}" if Config.debug_server
-      @thread.raise Stop
-      sleep 0
-      n = 0
-      while @thread.alive?
-        n += 1
-        puts "[#{Process.pid}] {#{@port}} waiting for #{@thread.inspect} to die" if Config.debug_server
-        @thread.raise Stop if n % 10 == 0
-        sleep 0.01
+      @mutex.synchronize do
+        puts "[#{Process.pid}] {#{@port}} requesting stop for #{@thread.inspect}" if Config.debug_server
+        catch (:stopped) do
+          # First ask nicely
+          @stopping = true
+          sleep 0.01
+          throw :stopped unless @thread.alive?
+          if @handling_request
+            # We don't want to interrupt the middle of a request if we can help it, produces really unpredictable behavior
+            5.times do
+              puts "[#{Process.pid}] {#{@port}} waiting for request in #{@thread.inspect}" #if Config.debug_server
+              sleep 1
+              throw :stopped unless @thread.alive?
+            end
+          end
+          while true
+            @thread.raise Stop
+            10.times do
+              sleep 0.01
+              throw :stopped unless @thread.alive?
+              puts "[#{Process.pid}] {#{@port}} waiting for #{@thread.inspect} to die" if Config.debug_server
+            end
+            puts "[#{Process.pid}] {#{@port}} #{@thread.inspect} really doesn't want to die" # if Config.debug_server
+          end
+        end
+        @thread = nil
       end
-      @thread = nil
     end
 
+    private
     def clear
       while @socket.kgio_tryaccept
         puts "[#{Process.pid}] {#{@port}} discarding request in #{@thread.inspect}" #if Config.debug_server
       end
     end
 
-    private
     def run_loop
       begin
-        @thread = Thread.current
         port = @port
         sock = @socket
         puts "[#{Process.pid}] {#{port}} entering loop in #{@thread.inspect}" if Config.debug_server
@@ -56,9 +76,11 @@ module Amnesia
         #### From worker_loop, very vaguely
         @server.instance_eval do
           begin
-            while client = sock.kgio_tryaccept
+            while not @stopping and client = sock.kgio_tryaccept
               #puts "[#{Process.pid}] {#{port}} got request" if Config.debug_server
+              @handling_request = true
               process_client(client)
+              @handling_request = false
             end
 
             IO.select([sock])
@@ -67,15 +89,12 @@ module Amnesia
             return
           rescue => e
             Unicorn.log_error(@logger, "listen loop error", e)
-          end while true
+          end while not @stopping
         end
       rescue Stop
-        # Make sure we're not leaving behind any crap that will be in the front of the queue for a child process
-        # Doesn't seem to be necessary, but can't hurt, right?
-        clear
-
-        puts "[#{Process.pid}] {#{port}} exiting from loop in #{@thread.inspect}" if Config.debug_server
+        puts "[#{Process.pid}] {#{port}} got stop in #{@thread.inspect}" if Config.debug_server
       end
+      puts "[#{Process.pid}] {#{port}} exiting from loop in #{@thread.inspect}" if Config.debug_server
     end
   end
 end
