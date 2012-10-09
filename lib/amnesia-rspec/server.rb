@@ -74,25 +74,23 @@ module Amnesia
         puts "[#{Process.pid}] {#{port}} entering loop in #{@thread.inspect}" if Config.debug_server
 
         #### From worker_loop, very vaguely
-        @server.instance_eval do
-          begin
-            while client = sock.kgio_tryaccept
-              #puts "[#{Process.pid}] {#{port}} got request" if Config.debug_server
-              @handling_request = true
-              # Check @stopping here to avoid race condition with #stop, since it checks @handling_request after setting @stopping
-              break if @stopping
-              process_client(client)
-              @handling_request = false
-            end
+        begin
+          while client = sock.kgio_tryaccept
+            #puts "[#{Process.pid}] {#{port}} got request" if Config.debug_server
+            @handling_request = true
+            # Check @stopping here to avoid race condition with #stop, since it checks @handling_request after setting @stopping
+            break if @stopping
+            @server.instance_eval { process_client(client) }
+            @handling_request = false
+          end
 
-            IO.select([sock])
-          rescue Errno::EBADF
-            puts "[#{Process.pid}] {#{port}} EBADF" if Config.debug_server
-            return
-          rescue => e
-            Unicorn.log_error(@logger, "listen loop error", e)
-          end while not @stopping
-        end
+          IO.select([sock])
+        rescue Errno::EBADF
+          puts "[#{Process.pid}] {#{port}} EBADF" if Config.debug_server
+          return
+        rescue => e
+          Unicorn.log_error(@logger, "listen loop error", e)
+        end while not @stopping
       rescue Stop
         puts "[#{Process.pid}] {#{port}} got stop in #{@thread.inspect}" if Config.debug_server
       end
