@@ -76,9 +76,11 @@ module Amnesia
         #### From worker_loop, very vaguely
         @server.instance_eval do
           begin
-            while not @stopping and client = sock.kgio_tryaccept
+            while client = sock.kgio_tryaccept
               #puts "[#{Process.pid}] {#{port}} got request" if Config.debug_server
               @handling_request = true
+              # Check @stopping here to avoid race condition with #stop, since it checks @handling_request after setting @stopping
+              break if @stopping
               process_client(client)
               @handling_request = false
             end
