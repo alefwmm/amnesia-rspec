@@ -15,7 +15,7 @@ module ActiveRecord
       def type_to_sql_with_notext(*args)
         type = type_to_sql_without_notext(*args)
         if type =~ /^(text|blob)/
-          'varchar(10000)' # If this is bigger than about 21000 it always fails, and sometimes hits a row limit anyway if too large
+          'varchar(2500)' # If this is bigger than about 21000 it always fails, and sometimes hits a row limit anyway if too large
         else
           type
         end
