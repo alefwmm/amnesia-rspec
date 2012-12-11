@@ -76,14 +76,36 @@ module RSpec
     end
 
     class Reporter
-      # We need to separate the non-yielding part of report (that calls start), which need to run in the parent,
+      # We need to separate the non-yielding part of report (that calls start), which needs to run in the parent,
       # from the yield of the block, which we want to happen in the child
-      def report_with_run(*args, &block)
-        report_without_run(*args) do
+      def report_with_run(expected_example_count, *args, &block)
+        report_without_run(expected_example_count, *args) do
+          @passed_count = 0
           run(&block)
+          missing_count = expected_example_count - @passed_count - @pending_count - @failure_count
+          if missing_count > 0
+            begin
+              raise "No report received for #{missing_count} examples, assuming they failed/crashed"
+            rescue => ex
+              example_failed(Example.new(
+                                 ExampleGroup.describe(""),
+                                 ex.message,
+                                 {execution_result: {exception: ex}} # This makes instafail happy
+                             ))
+            end
+          end
+          # It seems like this might result in proper return code, except that exit codes appear to be broken in the
+          # version of RSpec I'm testing with regardless; so no idea if this has any effect
+          @failure_count == 0 ? 0 : RSpec::configuration.failure_exit_code
         end
       end
       alias_method_chain :report, :run
+
+      def example_passed_with_count(example)
+        @passed_count += 1
+        example_passed_without_count(example)
+      end
+      alias_method_chain :example_passed, :count
 
       def run
         yield self
