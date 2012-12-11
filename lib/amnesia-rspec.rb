@@ -98,19 +98,32 @@ module Amnesia
 
   def self.signal
     begin
-      stop_session # Make sure we're not going to accept any connections after putting token
+      begin
+        Timeout::timeout(120) do
+          stop_session # Make sure we're not going to accept any connections after putting token
+        end
+      rescue => ex
+        puts "[#{Process.pid}] Error while stopping session, will retry: #{ex.inspect}"
+        puts ex.backtrace
+        retry
+      end
+
       # We're done working, check for any tokens on our private incoming channel, then close it
       tokens = [@token].compact
       begin
-        while token = @token_in_channel.recv_nonblock(MAX_TOKEN_LEN)
-          if token.length > 0
-            tokens << token
-            debug "found token #{token} in #{@token_in_channel.inspect}" if Config.debug
-          else
-            break
+        Timeout::timeout(15) do
+          while token = @token_in_channel.recv_nonblock(MAX_TOKEN_LEN)
+            if token.length > 0
+              tokens << token
+              debug "found token #{token} in #{@token_in_channel.inspect}" if Config.debug
+            else
+              break
+            end
           end
         end
       rescue Errno::EAGAIN
+      rescue Timeout::Error
+        puts "[#{Process.pid}] Hung during supposedly nonblocking recv, WTF"
       end
       @token_in_channel.close
       # Pass our first token upstream as little as possible, but not to ourselves

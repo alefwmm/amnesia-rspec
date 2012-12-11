@@ -31,6 +31,10 @@ module Amnesia
     end
 
     def stop
+      unless @thread
+        puts "[#{Process.pid}] {#{@port}} already stopped" if Config.debug_server
+        return
+      end
       @mutex.synchronize do
         puts "[#{Process.pid}] {#{@port}} requesting stop for #{@thread.inspect}" if Config.debug_server
         catch (:stopped) do

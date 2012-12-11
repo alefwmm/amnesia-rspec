@@ -39,6 +39,10 @@ module Amnesia
               @metadata = [:description, :full_description, :execution_result, :file_path, :pending, :location].each_with_object({}) do |k, h|
                 h[k] = @metadata[k]
               end
+              if @exception.is_a? ActionView::Template::Error
+                # Necessary to avoid Proc serialization error in @assigns ivar of AV::T::E; also seems more helpful
+                execution_result[:exception] = @exception = @exception.original_exception
+              end
             end
           end
         else
