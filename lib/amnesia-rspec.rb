@@ -35,7 +35,7 @@ module Amnesia
       end
     end
 
-    load "#{Rails.root.to_s}/db/schema.rb"
+    load "#{Rails.root.to_s}/db/schema.rb" unless ENV['SCHEMA_LOADED']
     ActiveRecord::Base.connection.cache_schema_info!
     Dir[Rails.root.join("spec/factories/**/*.rb")].each { |f| load f }
     FixtureHelpers.reload_fixtures
