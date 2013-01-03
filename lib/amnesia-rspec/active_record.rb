@@ -2,6 +2,24 @@ module Amnesia
   def self.stupid_cache_for_ar
     @stupid_cache_for_ar ||= {}
   end
+
+  # We want to give the DB a second to settle before forking if we've been using it in the parent
+  def self.accessed_db
+    db_pid_list[Process.pid] = true
+  end
+
+  def self.settle_db
+    if db_pid_list[Process.pid]
+      debug "Allowing DB to settle"
+      sleep 1
+      db_pid_list[Process.pid] = false
+    end
+  end
+
+  private
+  def self.db_pid_list
+    @db_pid_list ||= {}
+  end
 end
 
 module ActiveRecord
@@ -23,6 +41,7 @@ module ActiveRecord
       alias_method_chain :type_to_sql, :notext
 
       def execute_with_stupid_cache(sql, name = nil)
+        Amnesia.accessed_db
         @stupid_cache ||= Amnesia.stupid_cache_for_ar
         return @stupid_cache[sql] if @stupid_cache[sql]
         begin

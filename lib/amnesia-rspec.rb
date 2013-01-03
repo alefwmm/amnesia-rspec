@@ -167,6 +167,7 @@ module Amnesia
   def self.in_child
     save_external_session_state
     stop_session
+    settle_db
     child = Process.fork do
       sleep 0.001 # Sleeping a moment after forking seems to avoid random crashes
       add_token_channel
