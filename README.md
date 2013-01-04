@@ -4,34 +4,34 @@ These examples assume using the AMNESIA environment variable to activate Amnesia
 
 In your Gemfile:
 
-  gem 'mysql2', '0.2.11', :group => ENV['AMNESIA'] && :disabled
-  gem 'mysql2-amnesia', :git => 'git://github.com/chriswfx/mysql2', :branch => 'amnesia', :group => ENV['AMNESIA'] ? :default : :disabled
-  
-  group :test do
-    gem 'amnesia-rspec', :git => 'git://github.com/chriswfx/amnesia-rspec'
-  end
+    gem 'mysql2', '0.2.11', :group => ENV['AMNESIA'] && :disabled
+    gem 'mysql2-amnesia', :git => 'git://github.com/chriswfx/mysql2', :branch => 'amnesia', :group => ENV['AMNESIA'] ? :default : :disabled
+    
+    group :test do
+      gem 'amnesia-rspec', :git => 'git://github.com/chriswfx/amnesia-rspec'
+    end
 
 What's going on there is that you need to load an alternate MySQL driver when running in Amnesia mode, to get the in-process embedded MySQL server. This also means you want to configure bundle to exclude the :disabled group by default:
 
-  $ cat .bundle/config 
-  ---
-  BUNDLE_WITHOUT: disabled
+    $ cat .bundle/config 
+    ---
+    BUNDLE_WITHOUT: disabled
 
 Next, you need to configure Amnesia in your spec_helper.rb; if using Spork, this goes in the prefork block:
 
-  if ENV['AMNESIA']
-    Amnesia.forkit_and_forget! do |config|
-      config.max_workers = ENV['AMNESIA'].to_i
-      config.before_optimization = true
-      config.debug = false
-      config.debug_server = false
-      config.require_cache = '.amnesia_require_cache'
+    if ENV['AMNESIA']
+      Amnesia.forkit_and_forget! do |config|
+        config.max_workers = ENV['AMNESIA'].to_i
+        config.before_optimization = true
+        config.debug = false
+        config.debug_server = false
+        config.require_cache = '.amnesia_require_cache'
+      end
     end
-  end
 
 Now if I haven't forgetten anything (unlikely) and your environment is in every way compatible (also unlikely), you could magically run:
 
-AMNESIA=5 bundle exec rspec spec
+    AMNESIA=5 bundle exec rspec spec
 
 Let me know what breaks!
 
