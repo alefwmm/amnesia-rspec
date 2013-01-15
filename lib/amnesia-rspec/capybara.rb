@@ -32,7 +32,8 @@ module Amnesia
   end
 
   def self.reinit_session
-    @servers[@token] = nil
+    # Need to clear server for the register callback to work, and clear session for the server-boot-bypass to work
+    @session = @sessions[@token] = @server = @servers[@token] = nil
     init_session
   end
 
