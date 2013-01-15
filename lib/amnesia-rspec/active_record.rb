@@ -49,8 +49,11 @@ module ActiveRecord
         rescue Mysql2::Error => ex
           if ex.message =~ /\.MYI/
             puts "Evil disk access triggered by query: #{sql}"
+            # Attempt to retry
+            result = execute_without_stupid_cache(sql, name)
+          else
+            raise ex
           end
-          raise ex
         end
         #tmpfiles = @connection.query("show global status like '%_tmp_%';").map {|r| r.inspect}[0..1].join("\n")
         #if tmpfiles != @tmpfiles
