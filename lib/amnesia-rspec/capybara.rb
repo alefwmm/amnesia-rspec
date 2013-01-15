@@ -130,7 +130,7 @@ module Amnesia
   end
 
   def self.javascript?
-    @session && @session != @default_session
+    @session && @session != @default_session && @server
   end
 
   class AlwaysEqual
