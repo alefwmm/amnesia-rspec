@@ -2,6 +2,8 @@ module Amnesia
   class Server
     class Stop < Exception; end
 
+    attr_reader :port
+
     def initialize(app, port)
       @mutex = Mutex.new
       @port = port
@@ -45,7 +47,7 @@ module Amnesia
           if @handling_request
             # We don't want to interrupt the middle of a request if we can help it, produces really unpredictable behavior
             5.times do
-              puts "[#{Process.pid}] {#{@port}} waiting for request in #{@thread.inspect}" #if Config.debug_server
+              puts "[#{Process.pid}] {#{@port}} waiting for request in #{@thread.inspect}" if Config.debug_server
               sleep 1
               throw :stopped unless @thread.alive?
             end
@@ -67,7 +69,7 @@ module Amnesia
     private
     def clear
       while @socket.kgio_tryaccept
-        puts "[#{Process.pid}] {#{@port}} discarding request in #{@thread.inspect}" #if Config.debug_server
+        puts "[#{Process.pid}] {#{@port}} discarding request in #{@thread.inspect}" if Config.debug_server
       end
     end
 

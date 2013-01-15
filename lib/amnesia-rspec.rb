@@ -98,23 +98,13 @@ module Amnesia
 
   def self.signal
     begin
-      attempt = 0
       begin
-        attempt += 1
-        Timeout::timeout(30 / attempt) do
-          stop_session # Make sure we're not going to accept any connections after putting token
-        end
+        stop_session # Make sure we're not going to accept any connections after putting token
       rescue => ex
         puts "[#{Process.pid}] Error while stopping session: #{ex.inspect}"
         puts ex.backtrace
-        if attempt < 3
-          retry
-        else
-          # If we really can't stop the session, we don't want anyone else using this token, because the associated
-          # browser instance may be broken
-          puts "[#{Process.pid}] Failed to stop session after 3 attempts, burying token. *****************"
-          @token = nil
-        end
+        # This should really never happen; stop_session should handle its own business
+        puts "[#{Process.pid}] Failed to stop session, WTF. *****************"
       end
 
       # We're done working, check for any tokens on our private incoming channel, then close it

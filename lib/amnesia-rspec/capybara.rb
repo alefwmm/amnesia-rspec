@@ -16,15 +16,29 @@ module Amnesia
 
     Config.max_workers.times do |i|
       @token = "token_#{i}"
-      Capybara::Server.instance_eval { @ports = {} } # Reset each time or it'll pick the same port
-      @webkit_sessions[@token] = Capybara::Session.new(:webkit, Capybara.app).tap {|s| s.driver} # Driver is lazy-loaded
-      until @servers[@token]
-        puts "Waiting for server to register for #{@token}"
-        sleep 0.01
-      end
+      init_session
       seed_token @token
     end
     @token = nil
+  end
+
+  def self.init_session
+    Capybara::Server.instance_eval { @ports = {} } # Reset each time or it'll pick the same port
+    @webkit_sessions[@token] = Capybara::Session.new(:webkit, Capybara.app).tap {|s| s.driver} # Driver is lazy-loaded
+    until @servers[@token]
+      puts "Waiting for server to register for #{@token}"
+      sleep 0.01
+    end
+  end
+
+  def self.reinit_session
+    @servers[@token] = nil
+    init_session
+  end
+
+  # Torpedo this session for any future users by killing webkit; ensures it won't be re-used
+  def self.kill_session
+    @webkit_sessions[@token].driver.browser.instance_eval { Process.kill("KILL", @pid) }
   end
 
   def self.cleanup
@@ -39,21 +53,30 @@ module Amnesia
   def self.start_session(mode = nil)
     if mode == :webkit
       return if javascript? # Already set up
+      @session = @webkit_sessions[@token]
+      begin
+        @session.reset!
+      rescue => ex
+        puts "[#{Process.pid}] Error resetting session for #{@token}: #{ex}"
+        kill_session
+        reinit_session
+        @session = @webkit_sessions[@token]
+      end
       @server = @servers[@token]
       @server.start
-      @session = @webkit_sessions[@token]
       orig = $0
       $0 = "#{$0} waiting for server"
       while true
+        sleep 0.02
         begin
           if @session.driver.instance_eval { @rack_server.responsive? }
             break
           end
+        rescue Timeout::Error
         rescue => ex
-          puts "[#{Process.pid}] Error while waiting for server: #{ex}"
+          puts "[#{Process.pid}] {#{@server.port}} Error while waiting for server: #{ex}"
         end
-        puts "Waiting for server.."
-        sleep 0.02
+        puts "[#{Process.pid}] {#{@server.port}} Waiting for server.."
       end
       $0 = orig
       restore_external_session_state
@@ -65,7 +88,6 @@ module Amnesia
   def self.stop_session
     if javascript?
       @server.stop
-      @session.reset! # For some reason this only works if we stop the server FIRST
       @server = nil
     end
     @session = nil
