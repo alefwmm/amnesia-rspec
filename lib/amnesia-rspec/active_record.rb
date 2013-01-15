@@ -46,7 +46,7 @@ module ActiveRecord
         return @stupid_cache[sql] if @stupid_cache[sql]
         begin
           result = execute_without_stupid_cache(sql, name)
-        rescue Mysql2::Error => ex
+        rescue => ex
           if ex.message =~ /\.MYI/
             puts "Evil disk access triggered by query: #{sql}"
             # Attempt to retry
