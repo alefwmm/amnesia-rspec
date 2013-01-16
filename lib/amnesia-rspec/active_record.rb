@@ -44,15 +44,17 @@ module ActiveRecord
         Amnesia.accessed_db
         @stupid_cache ||= Amnesia.stupid_cache_for_ar
         return @stupid_cache[sql] if @stupid_cache[sql]
-        begin
-          result = execute_without_stupid_cache(sql, name)
-        rescue => ex
-          if ex.message =~ /\.MYI/
-            puts "Evil disk access triggered by query: #{sql}"
-            # Attempt to retry
-            result = execute_without_stupid_cache(sql, name)
-          else
-            raise ex
+        result = Timeout::timeout(90) do
+          begin
+            execute_without_stupid_cache(sql, name)
+          rescue => ex
+            if ex.message =~ /\.MYI/
+              puts "Evil disk access triggered by query: #{sql}"
+              # Attempt to retry
+              retry
+            else
+              raise ex
+            end
           end
         end
         #tmpfiles = @connection.query("show global status like '%_tmp_%';").map {|r| r.inspect}[0..1].join("\n")
