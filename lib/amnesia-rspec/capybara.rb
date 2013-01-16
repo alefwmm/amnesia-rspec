@@ -206,7 +206,7 @@ class Capybara::Driver::Webkit
   class Browser
     # Prevent from hanging indefinitely on read from browser
     def check_with_timeout
-      Timeout::timeout(90) do
+      Timeout::timeout(180) do
         check_without_timeout
       end
     end
