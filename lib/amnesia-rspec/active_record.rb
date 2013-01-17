@@ -48,7 +48,7 @@ module ActiveRecord
           begin
             execute_without_stupid_cache(sql, name)
           rescue => ex
-            if ex.message =~ /\.MYI/
+            if ex.message =~ /\.MYI|Can't find file/
               puts "Evil disk access triggered by query: #{sql}"
               # Attempt to retry
               retry
