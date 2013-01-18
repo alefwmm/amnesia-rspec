@@ -44,17 +44,27 @@ module ActiveRecord
         Amnesia.accessed_db
         @stupid_cache ||= Amnesia.stupid_cache_for_ar
         return @stupid_cache[sql] if @stupid_cache[sql]
-        result = Timeout::timeout(90) do
-          begin
-            execute_without_stupid_cache(sql, name)
-          rescue => ex
-            if ex.message =~ /\.MYI|Can't find file/
-              puts "Evil disk access triggered by query: #{sql}"
-              # Attempt to retry
+        attempts = 0
+        begin
+          attempts += 1
+          result = execute_without_stupid_cache(sql, name)
+        rescue => ex
+          if ex.message =~ /\.MYI|Can't find file|File '.*' not found/
+            puts "Evil disk access triggered by query: #{sql}"
+            puts ex.message
+            if attempts < 5
               retry
-            else
-              raise ex
+            elsif attempts < 10
+              # Try doing some other crap that we know uses tmpfiles to mess the state around; god this is a hack
+              begin
+                execute_without_stupid_cache(@stupid_cache.first[0])
+              rescue => ex
+                puts ex.message
+              end
+              retry
             end
+          else
+            raise ex
           end
         end
         #tmpfiles = @connection.query("show global status like '%_tmp_%';").map {|r| r.inspect}[0..1].join("\n")
