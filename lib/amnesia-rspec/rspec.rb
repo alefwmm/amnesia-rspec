@@ -96,7 +96,9 @@ module RSpec
           end
           # It seems like this might result in proper return code, except that exit codes appear to be broken in the
           # version of RSpec I'm testing with regardless; so no idea if this has any effect
-          @failure_count == 0 ? 0 : RSpec::configuration.failure_exit_code
+          #@failure_count == 0 ? 0 : RSpec::configuration.failure_exit_code
+          # Nevermind, force the issue
+          Amnesia.exit_status = @failure_count
         end
       end
       alias_method_chain :report, :run

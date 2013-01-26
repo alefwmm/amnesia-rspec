@@ -3,8 +3,20 @@ require "amnesia-rspec/config"
 require "amnesia-rspec/logging"
 require "amnesia-rspec/rspec_hooks" # Always need to patch RSpec a little, to enable :really_each
 
+# Attempt to register an exit hook at the bottom of the stack so that we can reliably control exit status
+# Works around various bugs in rspec/capybara/ruby
+at_exit do
+  if Amnesia.exit_status
+    exit Amnesia.exit_status
+  end
+end
+
 module Amnesia
   extend Logging
+
+  class << self
+    attr_accessor :exit_status
+  end
 
   def self.forkit_and_forget!
     Config.enabled = true
