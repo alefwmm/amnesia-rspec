@@ -97,7 +97,7 @@ module Amnesia
   # Actually, we want to save this for rack_test, too, so "external" is misleading; but we restore it externally to webkit
   def self.save_external_session_state
     if @session
-      @previous_url = @session.current_path if @session.driver.current_url
+      @previous_url = (u = @session.driver.current_url) && u =~ /:\/\/[^\/]*(\/.*)/ && $1
       if @session == @default_session
         @previous_cookies = @session.driver.browser.current_session.instance_eval {@rack_mock_session.cookie_jar}.to_hash.map do |k, v|
           "#{k}=#{v}; HttpOnly; domain=127.0.0.1; path=/"
