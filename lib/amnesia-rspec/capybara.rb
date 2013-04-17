@@ -24,22 +24,15 @@ module Amnesia
 
   def self.init_session
     Capybara::Server.instance_eval { @ports = {} } # Reset each time or it'll pick the same port
-    @webkit_sessions[@token] = Capybara::Session.new(:webkit, Capybara.app).tap {|s| s.driver} # Driver is lazy-loaded
+    @webkit_sessions[@token] = Capybara::Session.new(:webkit, Capybara.app).tap do |s|
+      s.driver # Driver is lazy-loaded -- must make sure we call it here
+      # In the current scheme of things, we boot a webkit server for each session usage, so kill the initial one
+      s.driver.browser.instance_eval { Process.kill("KILL", @pid) }
+    end
     until @servers[@token]
       puts "Waiting for server to register for #{@token}"
       sleep 0.01
     end
-  end
-
-  def self.reinit_session
-    # Need to clear server for the register callback to work, and clear session for the server-boot-bypass to work
-    @session = @webkit_sessions[@token] = @server = @servers[@token] = nil
-    init_session
-  end
-
-  # Torpedo this session for any future users by killing webkit; ensures it won't be re-used
-  def self.kill_session
-    @webkit_sessions[@token].driver.browser.instance_eval { Process.kill("KILL", @pid) }
   end
 
   def self.cleanup
@@ -55,13 +48,9 @@ module Amnesia
     if mode == :webkit
       return if javascript? # Already set up
       @session = @webkit_sessions[@token]
-      begin
-        @session.reset!
-      rescue => ex
-        puts "[#{Process.pid}] Error resetting session for #{@token}: #{ex}"
-        kill_session
-        reinit_session
-        @session = @webkit_sessions[@token]
+      # Just start up a new browser each time, it's fast and reduces flakiness
+      @session.driver.instance_eval do
+        @browser = Capybara::Driver::Webkit::Browser.new
       end
       @server = @servers[@token]
       @server.start
@@ -88,6 +77,7 @@ module Amnesia
 
   def self.stop_session
     if javascript?
+      @session.driver.browser.instance_eval { Process.kill("KILL", @pid) }
       @server.stop
       @server = nil
     end
