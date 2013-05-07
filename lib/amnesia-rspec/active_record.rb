@@ -53,15 +53,19 @@ module ActiveRecord
             puts "Evil disk access triggered by query: #{sql}"
             puts ex.message
             if attempts < 5
+              sleep 0.1
               retry
-            elsif attempts < 10
+            elsif attempts < 25
               # Try doing some other crap that we know uses tmpfiles to mess the state around; god this is a hack
               begin
-                execute_without_stupid_cache(@stupid_cache.first[0])
+                execute_without_stupid_cache(@stupid_cache.sample[0])
               rescue => ex
                 puts ex.message
               end
+              sleep 0.25
               retry
+            else
+              raise "Amnesia got MySQL stuck in a broken state, sorry. Query was: #{sql}"
             end
           else
             raise ex
