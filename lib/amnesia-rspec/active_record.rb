@@ -58,7 +58,7 @@ module ActiveRecord
             elsif attempts < 25
               # Try doing some other crap that we know uses tmpfiles to mess the state around; god this is a hack
               begin
-                execute_without_stupid_cache(@stupid_cache.sample[0])
+                execute_without_stupid_cache(@stupid_cache.to_a.sample[0])
               rescue => ex
                 puts ex.message
               end
