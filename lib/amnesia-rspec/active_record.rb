@@ -9,11 +9,12 @@ module Amnesia
   end
 
   def self.settle_db
-    if db_pid_list[Process.pid]
-      debug "Allowing DB to settle"
-      sleep 1
-      db_pid_list[Process.pid] = false
-    end
+    # Does this do anything?
+    #if db_pid_list[Process.pid]
+    #  debug "Allowing DB to settle"
+    #  sleep 1
+    #  db_pid_list[Process.pid] = false
+    #end
   end
 
   private
@@ -65,6 +66,7 @@ module ActiveRecord
               sleep 0.25
               retry
             else
+              puts execute_without_stupid_cache("EXPLAIN #{sql}").inspect
               raise "Amnesia got MySQL stuck in a broken state, sorry. Query was: #{sql}"
             end
           else
