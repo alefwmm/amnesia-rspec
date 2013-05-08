@@ -9,7 +9,7 @@ module Amnesia
   end
 
   def self.settle_db
-    # Does this do anything?
+    # Not clear this does anything
     #if db_pid_list[Process.pid]
     #  debug "Allowing DB to settle"
     #  sleep 1
@@ -53,20 +53,20 @@ module ActiveRecord
           if ex.message =~ /\.MYI|Can't find file|File '.*' not found/
             puts "Evil disk access triggered by query: #{sql}"
             puts ex.message
-            if attempts < 5
-              sleep 0.1
+            if attempts < 100
+              sleep rand # Try to desynchronize competing children starting at the same filename sequence position
               retry
-            elsif attempts < 25
-              # Try doing some other crap that we know uses tmpfiles to mess the state around; god this is a hack
-              begin
-                execute_without_stupid_cache(@stupid_cache.to_a.sample[0])
-              rescue => ex
-                puts ex.message
-              end
-              sleep 0.25
-              retry
+            #elsif attempts < 25
+            #  # Try doing some other crap that we know uses tmpfiles to mess the state around; god this is a hack
+            #  begin
+            #    execute_without_stupid_cache(@stupid_cache.to_a.sample[0])
+            #  rescue => ex
+            #    puts ex.message
+            #  end
+            #  sleep 0.25
+            #  retry
             else
-              puts execute_without_stupid_cache("EXPLAIN #{sql}").inspect
+              #puts execute_without_stupid_cache("EXPLAIN #{sql}").inspect
               raise "Amnesia got MySQL stuck in a broken state, sorry. Query was: #{sql}"
             end
           else

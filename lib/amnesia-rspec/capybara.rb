@@ -196,8 +196,12 @@ class Capybara::Driver::Webkit
   class Browser
     # Prevent from hanging indefinitely on read from browser
     def check_with_timeout
-      Timeout::timeout(180) do
-        check_without_timeout
+      begin
+        Timeout::timeout(90) do
+          check_without_timeout
+        end
+      rescue TimeoutError
+        raise "Timed out waiting for response from Webkit"
       end
     end
     alias_method_chain :check, :timeout
