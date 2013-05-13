@@ -1,3 +1,5 @@
+require 'securerandom'
+
 module Amnesia
   def self.stupid_cache_for_ar
     @stupid_cache_for_ar ||= {}
@@ -51,10 +53,12 @@ module ActiveRecord
           result = execute_without_stupid_cache(sql, name)
         rescue => ex
           if ex.message =~ /\.MYI|Can't find file|File '.*' not found/
-            puts "Evil disk access triggered by query: #{sql}"
-            puts ex.message
+            puts "[#{Process.pid}] Evil disk access triggered by query: #{sql}"
+            puts "[#{Process.pid}] #{ex.message}"
             if attempts < 100
-              sleep rand # Try to desynchronize competing children starting at the same filename sequence position
+              time = SecureRandom.random_number # Avoid predictable random seeding from tests
+              puts "[#{Process.pid}] Sleeping for #{time}"
+              sleep time # Try to desynchronize competing children starting at the same filename sequence position
               retry
             #elsif attempts < 25
             #  # Try doing some other crap that we know uses tmpfiles to mess the state around; god this is a hack
@@ -67,7 +71,7 @@ module ActiveRecord
             #  retry
             else
               #puts execute_without_stupid_cache("EXPLAIN #{sql}").inspect
-              raise "Amnesia got MySQL stuck in a broken state, sorry. Query was: #{sql}"
+              raise "[#{Process.pid}] Amnesia got MySQL stuck in a broken state, sorry. Query was: #{sql}"
             end
           else
             raise ex
