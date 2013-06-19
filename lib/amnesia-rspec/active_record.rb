@@ -35,7 +35,7 @@ module ActiveRecord
       #Text type not supported by MEMORY engine
       def type_to_sql_with_notext(*args)
         type = type_to_sql_without_notext(*args)
-        if type =~ /^(text|blob)/
+        if type =~ /(text|blob)/
           'varchar(2500)' # If this is bigger than about 21000 it always fails, and sometimes hits a row limit anyway if too large
         else
           type
