@@ -1,4 +1,4 @@
-# Installation
+## Installation
 
 These examples assume using the AMNESIA environment variable to activate Amnesia and set the number of parallel tests to run. That's not required, but is the easiest way we've figure out so far.
 
@@ -29,15 +29,27 @@ Next, you need to configure Amnesia in your spec_helper.rb; if using Spork, this
       end
     end
 
-Now if I haven't forgetten anything (unlikely) and your environment is in every way compatible (also unlikely), you could magically run:
+### First run
+
+To prime your Amnesia bundle and databases, you'll need to prep each installation with:
+
+    AMNESIA=1 bundle install
+    AMNESIA=1 bundle exec rake RAILS_ENV=test db:create
+    AMNESIA=1 bundle exec rake RAILS_ENV=test db:schema:load
+
+### Running tests
+
+Now to run tests:
 
     AMNESIA=5 bundle exec rspec spec
 
-Let me know what breaks!
+The number (5) is how many parallel tasks to run; usually you want this to be in the neighborhood of the number of processor cores on your machine.
 
-# Known Limitations
+Note that you want to run the tests with the rspec executable, NOT with 'rake spec', which will get confused by the Amnesia DB environment.
 
-## Due to the MySQL Memory Engine
+## Known Limitations
+
+### Due to the MySQL Memory Engine
 
 Text and blob columns aren't supported; they will be automatically converted to varchar by Amnesia, but if you have too many in one table, you may hit row size limit issues and need to tune the varchar size.
 
@@ -45,7 +57,7 @@ Transactions aren't supported; asking for them won't cause an error, but rollbac
 
 Unlike normal with MySQL, result row ordering will be unpredictable if you don't specify any ORDER BY. Probably you'll need to add ".order(:id)" to a whole bunch of places [that it arguably should have been anyway].
 
-## Due to before(:each) optimization (if enabled)
+### Due to before(:each) optimization (if enabled)
 
 When using an external driver (capybara-webkit), whatever web page the browser is on at the end of the before block(s) will be reloaded afresh at the beginning of the example -- so for instance if you fill in a form in the before block, then press submit in the example, that won't work. If you need to do something like that, set disable_before_optimization: true on that rspec context. 
 
