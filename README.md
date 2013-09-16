@@ -65,3 +65,20 @@ If you modify an example instance variable inside a block defined in a before bl
 
 Using 'def' to define an example-scoped method inside a before block won't work properly. Although why you'd do that is a mystery.
 
+## Troubleshooting
+
+### You get: No report received for X examples, assuming they failed/crashed
+
+As it implies, this message means that a process that an example was running in failed to report back to the master process. This could be due to the ruby interpreter crashing. It could also be due to an exception being raised that couldn't be serialized, usually due to containing a Proc. In that case, you'll get output looking like this:
+
+    [5835] Error putting: [:example_failed, #<RSpec::Core::Example:0x000000150ec698 @example_block=nil, @options={}, @example_group_class=RSpec::Core::ExampleGroup::Nested_348::Nested_1, @metadata={:description=>"should show feedback area if there exists a consult request", :full_description=>"diagnostic_reports/show.html.haml Feedback should show feedback area if there exists a consult request", :execution_result=>{:started_at=>2013-09-16 10:33:54 -0700, :exception=>#<NoMethodError: undefined method `impersonating?' for #<ActionView::TestCase::TestController:0x0000001172bb70>>, :status=>"failed", :finished_at=>2013-09-16 10:33:55 -0700, :run_time=>0.590576754}, :file_path=>"/home/teamcity/TeamCity/buildAgent.topaz-1/work/644541dc352cbb54/spec/views/diagnostic_reports/show.html.haml_spec.rb", :pending=>nil, :location=>"/home/teamcity/TeamCity/buildAgent.topaz-1/work/644541dc352cbb54/spec/views/diagnostic_reports/show.html.haml_spec.rb:42"}, @exception=#<NoMethodError: undefined method `impersonating?' for #<ActionView::TestCase::TestController:0x0000001172bb70>>, @pending_declared_in_example=false, @example_group_instance=nil, @around_hooks=nil>]
+    #<TypeError: can't dump hash with default proc>
+    	/home/teamcity/.rvm/gems/ruby-1.9.3-p448@topaz/gems/rspec-mocks-2.9.0/lib/rspec/mocks/extensions/marshal.rb:5:in `dump'
+    	/home/teamcity/.rvm/gems/ruby-1.9.3-p448@topaz/gems/rspec-mocks-2.9.0/lib/rspec/mocks/extensions/marshal.rb:5:in `dump_with_mocks'
+    	/home/teamcity/.rvm/gems/ruby-1.9.3-p448@topaz/gems/cod-0.5.0/lib/cod/simple_serializer.rb:15:in `en'
+    	/home/teamcity/.rvm/gems/ruby-1.9.3-p448@topaz/gems/cod-0.5.0/lib/cod/pipe.rb:109:in `put'
+    	/home/teamcity/.rvm/gems/ruby-1.9.3-p448@topaz/bundler/gems/amnesia-rspec-e2ec4a22b017/lib/amnesia-rspec/cod_proxy.rb:53:in `method_missing'
+    	/home/teamcity/.rvm/gems/ruby-1.9.3-p448@topaz/gems/rspec-core-2.9.0/lib/rspec/core/example.rb:193:in `finish'
+
+Amnesia attempts to nil out places known to be likely to contain Procs before serializing the test results. So if you get one of these, and can figure out where the Proc is, please report it as a bug. Otherwise, solving the underlying test failure will make this go away.
+
