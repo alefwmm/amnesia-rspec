@@ -28,6 +28,11 @@ end
 module ActiveRecord
   module ConnectionAdapters
     class Mysql2Adapter
+      # We can only have one client in the process when using embedded server
+      def self.new(*args)
+        @global_mysql2_adapter ||= super
+      end
+
       def create_table(table_name, options = {})
         super(table_name, options.reverse_merge(:options => "ENGINE=MEMORY"))
       end
@@ -42,6 +47,29 @@ module ActiveRecord
         end
       end
       alias_method_chain :type_to_sql, :notext
+
+      def thread_init_and_lock
+        Thread.exclusive do
+          @seen_threads ||= {}
+          unless @seen_threads[Thread.current]
+            @seen_threads[Thread.current] = true
+            new_thread = true
+          end
+          #puts "#{@connection.inspect} #{Process.pid} #{Thread.current.inspect} #{new_thread.inspect}"
+          @connection.init_thread if new_thread
+          yield
+        end
+      end
+
+      def execute_with_thread_init(*args)
+        thread_init_and_lock { execute_without_thread_init(*args) }
+      end
+      alias_method_chain :execute, :thread_init
+
+      def exec_query_with_thread_init(*args)
+        thread_init_and_lock { exec_query_without_thread_init(*args) }
+      end
+      alias_method_chain :exec_query, :thread_init
 
       def execute_with_stupid_cache(sql, name = nil)
         Amnesia.accessed_db

@@ -1,3 +1,9 @@
+if defined?(Bundler)
+  # This tricks the mysql2 connection adapter into accepting our mysql2 gem under a different name
+  # (which is needed to coexist in the Gemfile with the normal version)
+  Bundler.definition.requested_specs.find {|s| s.name == 'mysql2-amnesia'}.name = 'mysql2'
+end
+
 require "amnesia-rspec/version"
 require "amnesia-rspec/config"
 require "amnesia-rspec/logging"
