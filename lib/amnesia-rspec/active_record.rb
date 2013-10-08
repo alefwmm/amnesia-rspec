@@ -61,27 +61,28 @@ module ActiveRecord
         end
       end
 
-      def execute_with_thread_init(*args)
-        thread_init_and_lock { execute_without_thread_init(*args) }
+      def execute_with_amnesia(*args)
+        thread_init_and_lock { execute_with_stupid_cache(:execute, *args) }
       end
-      alias_method_chain :execute, :thread_init
+      alias_method_chain :execute, :amnesia
 
-      def exec_query_with_thread_init(*args)
-        thread_init_and_lock { exec_query_without_thread_init(*args) }
+      def exec_query_with_amnesia(*args)
+        thread_init_and_lock { execute_with_stupid_cache(:exec_query, *args) }
       end
-      alias_method_chain :exec_query, :thread_init
+      alias_method_chain :exec_query, :amnesia
 
-      def execute_with_stupid_cache(sql, name = nil)
+      # execute and exec_query have slightly different args; method chaining above tells us which one to call
+      def execute_with_stupid_cache(execute_method, sql, *args)
         Amnesia.accessed_db
         @stupid_cache ||= Amnesia.stupid_cache_for_ar
         return @stupid_cache[sql] if @stupid_cache[sql]
         attempts = 0
         begin
           attempts += 1
-          result = execute_without_stupid_cache(sql, name)
+          result = send(:"#{execute_method}_without_amnesia", sql, *args)
         rescue => ex
           if ex.message =~ /\.MYI|Can't find file|File '.*' not found/
-            puts "[#{Process.pid}] Evil disk access triggered by query: #{sql}"
+            puts "[#{Process.pid}] Evil disk access triggered in #{execute_method} by query: #{sql}"
             puts "[#{Process.pid}] #{ex.message}"
             if attempts < 100
               time = SecureRandom.random_number # Avoid predictable random seeding from tests
@@ -118,7 +119,6 @@ module ActiveRecord
         #end
         result
       end
-      alias_method_chain :execute, :stupid_cache
 
       def cache_schema_info!
         @stupid_cache ||= Amnesia.stupid_cache_for_ar
