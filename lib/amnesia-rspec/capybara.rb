@@ -78,6 +78,14 @@ module Amnesia
     end
   end
 
+  # Check if the server recorded errors via Capybara Rack Middleware; run in after_each, inside the RWF work,
+  # unlike stop_session whose errors would be reported as an Amnesia failure, rather than a spec failure
+  def self.check_for_server_errors!
+    if javascript?
+      raise @session.server.error if Capybara.raise_server_errors and @session.server.error
+    end
+  end
+
   def self.stop_session
     if javascript?
       @session.driver.browser.instance_eval { @connection.instance_eval { Process.kill("KILL", @pid) } }

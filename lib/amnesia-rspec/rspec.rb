@@ -61,6 +61,7 @@ module RSpec
       def run_after_each
         #puts "[#{Process.pid}] #{self} after_each"
         @example_group_instance.verify_mocks_for_rspec
+        Amnesia.check_for_server_errors!
       end
 
       #require 'ruby-prof'
