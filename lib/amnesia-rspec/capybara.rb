@@ -12,7 +12,7 @@ module Amnesia
 
     @webkit_sessions = {}
     @servers = {}
-    @default_session = Capybara::Session.new(Capybara.default_driver, Capybara.app).tap {|s| s.driver} # Driver is lazy-loaded
+    @default_session = Capybara::Session.new(Capybara.default_driver, Capybara.app)
 
     Config.max_workers.times do |i|
       @token = "token_#{i}"
@@ -25,14 +25,17 @@ module Amnesia
   def self.init_session
     Capybara::Server.instance_eval { @ports = {} } # Reset each time or it'll pick the same port
     @webkit_sessions[@token] = Capybara::Session.new(:webkit, Capybara.app).tap do |s|
-      s.driver # Driver is lazy-loaded -- must make sure we call it here
       # In the current scheme of things, we boot a webkit server for each session usage, so kill the initial one
-      s.driver.browser.instance_eval { Process.kill("KILL", @pid) }
+      s.driver.browser.instance_eval { @connection.instance_eval { Process.kill("KILL", @pid) } }
     end
-    until @servers[@token]
+    until booting_server_registered?
       puts "Waiting for server to register for #{@token}"
       sleep 0.01
     end
+  end
+
+  def self.booting_server_registered?
+    @servers[@token]
   end
 
   def self.cleanup
@@ -50,7 +53,7 @@ module Amnesia
       @session = @webkit_sessions[@token]
       # Just start up a new browser each time, it's fast and reduces flakiness
       @session.driver.instance_eval do
-        @browser = Capybara::Driver::Webkit::Browser.new
+        @browser = Capybara::Webkit::Browser.new(Capybara::Webkit::Connection.new)
       end
       @server = @servers[@token]
       @server.start
@@ -59,7 +62,7 @@ module Amnesia
       while true
         sleep 0.02
         begin
-          if @session.driver.instance_eval { @rack_server.responsive? }
+          if @session.server.responsive?
             break
           end
         rescue Timeout::Error
@@ -77,7 +80,7 @@ module Amnesia
 
   def self.stop_session
     if javascript?
-      @session.driver.browser.instance_eval { Process.kill("KILL", @pid) }
+      @session.driver.browser.instance_eval { @connection.instance_eval { Process.kill("KILL", @pid) } }
       @server.stop
       @server = nil
     end
@@ -87,7 +90,7 @@ module Amnesia
   # Actually, we want to save this for rack_test, too, so "external" is misleading; but we restore it externally to webkit
   def self.save_external_session_state
     if @session
-      @previous_url = (u = @session.driver.current_url) && u =~ /:\/\/[^\/]*(\/.*)/ && $1
+      @previous_url = (u = @session.driver.browser.current_url) && u =~ /:\/\/[^\/]*(\/.*)/ && $1
       if @session == @default_session
         @previous_cookies = @session.driver.browser.current_session.instance_eval {@rack_mock_session.cookie_jar}.to_hash.map do |k, v|
           "#{k}=#{v}; HttpOnly; domain=127.0.0.1; path=/"
@@ -171,11 +174,22 @@ module Capybara
     def responsive_with_preload?
       if Amnesia.current_session
         responsive_without_preload?
+      elsif !Amnesia.booting_server_registered?
+        # Capybara won't start the server unless it's not responsive; so force false until the server registers with us
+        false
       else
         true
       end
     end
     alias_method_chain :responsive?, :preload
+
+    # Otherwise responsive? will whine about our thread being dead after forking
+    def boot_with_clear_server_thread
+      boot_without_clear_server_thread.tap do
+        @server_thread = nil
+      end
+    end
+    alias_method_chain :boot, :clear_server_thread
   end
 
   def self.current_session
@@ -192,7 +206,7 @@ Capybara.server do |app, port|
   end
 end
 
-class Capybara::Driver::Webkit
+module Capybara::Webkit
   class Browser
     # Prevent from hanging indefinitely on read from browser
     def check_with_timeout
@@ -207,20 +221,22 @@ class Capybara::Driver::Webkit
     alias_method_chain :check, :timeout
   end
 
-  # current_url will fail if we haven't visited anything, so keep track of whether we have
-  def current_url_with_safety
-    if @last_visited
-      current_url_without_safety
+  class Driver
+    # current_url will fail if we haven't visited anything, so keep track of whether we have
+    def current_url_with_safety
+      if @last_visited
+        current_url_without_safety
+      end
     end
+    def visit_with_safety(path)
+      @last_visited = path
+      visit_without_safety(path)
+    end
+    def reset_with_safety!
+      @last_visited = nil
+      reset_without_safety!
+    end
+    [:current_url, :visit, :reset!].each {|m| alias_method_chain m, :safety}
   end
-  def visit_with_safety(path)
-    @last_visited = path
-    visit_without_safety(path)
-  end
-  def reset_with_safety!
-    @last_visited = nil
-    reset_without_safety!
-  end
-  [:current_url, :visit, :reset!].each {|m| alias_method_chain m, :safety}
 end
 
