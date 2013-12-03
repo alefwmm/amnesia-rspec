@@ -54,6 +54,7 @@ module Amnesia
       # Just start up a new browser each time, it's fast and reduces flakiness
       @session.driver.instance_eval do
         @browser = Capybara::Webkit::Browser.new(Capybara::Webkit::Connection.new)
+        @browser.enable_logging if Config.debug_webkit
       end
       @server = @servers[@token]
       @server.start
@@ -120,8 +121,8 @@ module Amnesia
     if @previous_url
       #puts "Restoring path: #{@previous_url}"
       begin
-        @session.driver.visit @previous_url
-      rescue Capybara::Driver::Webkit::WebkitInvalidResponseError => ex
+        @session.visit @previous_url
+      rescue Capybara::Webkit::InvalidResponseError => ex
         puts "Warning: error restoring URL '#{@previous_url}': #{ex}"
       end
     end
