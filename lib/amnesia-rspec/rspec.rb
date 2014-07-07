@@ -22,7 +22,7 @@ module RSpec
 
       class << self
         extend Amnesia::RunWithFork
-        run_with_fork
+        run_with_fork timeout: Amnesia::Config.example_group_timeout
 
         def run_before_all_hooks_with_mocks(example_group_instance)
           #puts "[#{Process.pid}] #{self} before_all_hooks start"
@@ -55,7 +55,7 @@ module RSpec
 
     class Example
       extend Amnesia::RunWithFork
-      run_with_fork example: true
+      run_with_fork example: true, timeout: Amnesia::Config.example_timeout
 
       # Don't need to do after stuff aside from verifying mocks, will exit() shortly
       def run_after_each
@@ -115,7 +115,7 @@ module RSpec
       end
 
       extend Amnesia::RunWithFork
-      run_with_fork master: true
+      run_with_fork master: true, timeout: Amnesia::Config.master_timeout
     end
   end
 end

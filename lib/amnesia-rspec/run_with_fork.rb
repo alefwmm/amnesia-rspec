@@ -1,4 +1,6 @@
 module Amnesia
+  class ConfiguredTimeout < StandardError; end
+
   module RunWithFork
     class << self
       include Logging
@@ -73,7 +75,9 @@ module Amnesia
         RunWithFork.register_work do
           logging_with(self)
           debug_state "working"
-          run_without_child(*args, &(proxy_block || block))
+          Timeout::timeout(options[:timeout], Amnesia::ConfiguredTimeout) do
+            run_without_child(*args, &(proxy_block || block))
+          end
         end
         # Parent
         if proxy # Root level process receiving results
