@@ -75,6 +75,12 @@ module Amnesia
         RunWithFork.register_work do
           logging_with(self)
           debug_state "working"
+          # Ensure we will die eventually, because Timeout won't necessarily escape native code (in particular
+          # embedded SQL engine)
+          if options[:timeout]
+            Thread.new {sleep options[:timeout] +  5.seconds; Process.kill("INT", 0)}
+            Thread.new {sleep options[:timeout] + 10.seconds; Process.kill("KILL", 0)}
+          end
           Timeout::timeout(options[:timeout], Amnesia::ConfiguredTimeout) do
             run_without_child(*args, &(proxy_block || block))
           end
