@@ -6,7 +6,8 @@ module Amnesia
 
     def logging_with(obj)
       if obj.is_a?(RSpec::Core::Example)
-        Logging.prefix = "#{obj.example_group.to_s} Example"
+        Logging.prefix = obj.location
+        # Logging.prefix = "#{obj.example_group.to_s} Example"
       else
         Logging.prefix = obj.to_s
       end
