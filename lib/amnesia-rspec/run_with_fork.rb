@@ -78,8 +78,8 @@ module Amnesia
           # Ensure we will die eventually, because Timeout won't necessarily escape native code (in particular
           # embedded SQL engine)
           if options[:timeout]
-            Thread.new {sleep options[:timeout] +  5.seconds; Process.kill("INT", 0)}
-            Thread.new {sleep options[:timeout] + 10.seconds; Process.kill("KILL", 0)}
+            Thread.new {sleep options[:timeout] + 30.seconds; Process.kill("INT", Process.pid)}
+            Thread.new {sleep options[:timeout] + 60.seconds; Process.kill("KILL", Process.pid)}
           end
           Timeout::timeout(options[:timeout], Amnesia::ConfiguredTimeout) do
             run_without_child(*args, &(proxy_block || block))
