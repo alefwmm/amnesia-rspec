@@ -90,7 +90,7 @@ module Amnesia
           RunWithFork.perform_work(true) # Start the work we just registered in a child
           debug_state "parent waiting for proxy"
           proxy.run_proxy_to_end
-          Amnesia.cleanup
+          Amnesia.cleanup unless Spork.using_spork?
         end
       end
       alias_method_chain :run, :child
