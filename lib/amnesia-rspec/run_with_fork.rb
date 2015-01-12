@@ -18,7 +18,7 @@ module Amnesia
           debug_state "parent starting child"
           Amnesia.in_child do
             begin
-              if Spork.using_spork?
+              if defined?(Spork) && Spork.using_spork?
                 $stdout = STDOUT.reopen(Amnesia.output)
                 $stderr = STDERR.reopen(Amnesia.output)
               end
@@ -65,7 +65,7 @@ module Amnesia
           proxy_block = ->(reporter) do
             block.call(proxy)
           end
-          Amnesia.run_iopipe if Spork.using_spork?
+          Amnesia.run_iopipe if defined?(Spork) && Spork.using_spork?
           #puts "***************** First fork *******************"
         else # If we're not in charge here, we need a token to run
           debug_state "waiting for token"
@@ -90,7 +90,7 @@ module Amnesia
           RunWithFork.perform_work(true) # Start the work we just registered in a child
           debug_state "parent waiting for proxy"
           proxy.run_proxy_to_end
-          Amnesia.cleanup unless Spork.using_spork?
+          Amnesia.cleanup unless defined?(Spork) && Spork.using_spork?
         end
       end
       alias_method_chain :run, :child

@@ -49,7 +49,7 @@ module Amnesia
     @iopipe_r, @iopipe_w = IO.pipe
 
     RSpec.configure do |config|
-      if Spork.using_spork?
+      if defined?(Spork) && Spork.using_spork?
         config.output_stream = config.error_stream = IO.for_fd(2, "a")
       end
     end

@@ -24,5 +24,4 @@ Gem::Specification.new do |s|
   s.add_runtime_dependency "unicorn", '4.0.1'
   s.add_runtime_dependency "rspec-core", '2.9.0'
   s.add_runtime_dependency "capybara-webkit", '>= 0.13'
-  s.add_runtime_dependency "spork", '>= 1.0.0rc2'
 end
