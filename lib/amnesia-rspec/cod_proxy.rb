@@ -67,7 +67,7 @@ class RSpec::Core::Example
   end
 
   def marshal_load(data)
-    @example_group_class = data.delete(:example_group).constantize
+    @example_group_class = data.delete(:example_group).constantize if data[:example_group]
     data.each_pair do |h, k|
       instance_variable_set("@#{h}", k)
     end

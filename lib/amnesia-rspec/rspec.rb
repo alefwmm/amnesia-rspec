@@ -17,6 +17,18 @@ module RSpec
           # Setup up render notifications in case a new render happens in example, before ivars are populated with
           # previous results from earlier before blocks
           setup_subscriptions if respond_to?(:setup_subscriptions)
+
+          # Avoid overwriting the @request from a before_each that was optimized into a before_all
+          if respond_to?(:setup_controller_request_and_response)
+            class << self
+              def setup_controller_request_and_response_with_check_first
+                unless @request && @response
+                  setup_controller_request_and_response_without_check_first
+                end
+              end
+              alias_method_chain :setup_controller_request_and_response, :check_first
+            end
+          end
         end
       end
 
@@ -55,6 +67,8 @@ module RSpec
           # Prevent the line after the one that calls us from nuking stuff, because we need it during the goofy RWF work cycle for last-children
           before_all_ivars.define_singleton_method(:clear) {}
         end
+
+
       end
     end
 
@@ -124,3 +138,4 @@ module RSpec
     end
   end
 end
+
