@@ -20,6 +20,11 @@ module RSpec
         end
       end
 
+      # Provide access to filters on example_group_instance for before_each hooks which are expecting Example instance
+      def all_apply?(filters)
+        self.class.all_apply?(filters)
+      end
+
       class << self
         extend Amnesia::RunWithFork
         run_with_fork timeout: Amnesia::Config.example_group_timeout
@@ -32,7 +37,7 @@ module RSpec
             example_group_instance.setup_mocks_for_rspec
 
             # really_each blocks should always be set up at every nesting level to allow before each stuff to work
-            world.run_hook_filtered(:before, :each, self, example_group_instance)
+            run_before_each_hooks(example_group_instance)
           end
 
           run_before_all_hooks_without_mocks(example_group_instance)

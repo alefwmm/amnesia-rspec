@@ -28,27 +28,7 @@ module Amnesia
     def method_missing(*args)
       # Proxying things that we don't really care about slows us down; also, screws up Teamcity which is expecting 1 thread
       return if [:example_group_started, :example_group_finished].include?(args[0])
-      #puts "Proxying: #{args[0]}"
-      args.map! do |obj|
-        if obj.is_a? ::RSpec::Core::Example
-          obj.dup.tap do |example|
-            example.instance_eval do
-              # Get rid of junk we can't or don't want to serialize
-              @example_block = @example_group_instance = @around_hooks = nil
-              # Do it this way to trigger lazy generation
-              @metadata = [:description, :full_description, :execution_result, :file_path, :pending, :location].each_with_object({}) do |k, h|
-                h[k] = @metadata[k]
-              end
-              if @exception.is_a? ActionView::Template::Error
-                # Necessary to avoid Proc serialization error in @assigns ivar of AV::T::E; also seems more helpful
-                execution_result[:exception] = @exception = @exception.original_exception
-              end
-            end
-          end
-        else
-          obj
-        end
-      end
+      # puts "Proxying: #{args[0]}"
       begin
         @pipe.put(args)
       rescue => ex
@@ -66,6 +46,30 @@ module Amnesia
         end
       rescue ::Cod::ConnectionLost
       end
+    end
+  end
+end
+
+# Define serialization format for Examples to only contain stuff we care about, and avoid trying
+# to dump things like Procs that will raise exceptions
+class RSpec::Core::Example
+  def marshal_dump
+    {
+        # Only stuff we really want
+        # Have to actually call [] for each key on @metadata, it's not a normal hash we can #slice
+        metadata: Hash[[:description, :full_description, :execution_result, :file_path, :pending, :location].map {|k| [k, @metadata[k]]}],
+
+        # Necessary to avoid Proc serialization error in @assigns ivar of AV::T::E; also seems more helpful
+        exception: @exception.is_a?(ActionView::Template::Error) ? @exception.original_exception : @exception,
+
+        example_group: example_group.to_s # Can't dump class
+    }#.tap {|data| puts "Marshalled Example to: #{data.inspect}"}
+  end
+
+  def marshal_load(data)
+    @example_group_class = data.delete(:example_group).constantize
+    data.each_pair do |h, k|
+      instance_variable_set("@#{h}", k)
     end
   end
 end
