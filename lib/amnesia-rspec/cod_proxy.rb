@@ -54,22 +54,34 @@ end
 # to dump things like Procs that will raise exceptions
 class RSpec::Core::Example
   def marshal_dump
+    metadata = [:description, :full_description, :execution_result, :file_path, :pending, :location].each_with_object({}) do |k, h|
+      h[k] = @metadata[k]
+    end
     {
         # Only stuff we really want
         # Have to actually call [] for each key on @metadata, it's not a normal hash we can #slice
-        metadata: Hash[[:description, :full_description, :execution_result, :file_path, :pending, :location].map {|k| [k, @metadata[k]]}],
+        metadata: metadata,
 
         # Necessary to avoid Proc serialization error in @assigns ivar of AV::T::E; also seems more helpful
         exception: @exception.is_a?(ActionView::Template::Error) ? @exception.original_exception : @exception,
 
         example_group: example_group.to_s # Can't dump class
-    }#.tap {|data| puts "Marshalled Example to: #{data.inspect}"}
+    } #.tap {|data| puts "Marshalled Example to: #{data.inspect}"}
   end
 
   def marshal_load(data)
     @example_group_class = data.delete(:example_group).constantize if data[:example_group]
-    data.each_pair do |h, k|
-      instance_variable_set("@#{h}", k)
+    # puts "Loading keys: #{data.keys}"
+    # puts "Loading values: #{data.values}"
+    data.each_pair do |k, v|
+      # puts "Loading k: #{k}"
+      # puts "Loading v: #{v}"
+      begin
+        instance_variable_set("@#{k}", v)
+      rescue NameError
+        puts "WTF? Disallowed instance variable name in serialized Example: #{k}"
+        puts "Full data: #{data.inspect}"
+      end
     end
   end
 end

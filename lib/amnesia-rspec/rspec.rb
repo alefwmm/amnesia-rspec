@@ -29,6 +29,18 @@ module RSpec
               alias_method_chain :setup_controller_request_and_response, :check_first
             end
           end
+
+          # Same thing with @rendered, for view tests
+          if respond_to?(:setup_with_controller)
+            class << self
+              def setup_with_controller_with_check_first
+                unless @request && @rendered
+                  setup_with_controller_without_check_first
+                end
+              end
+              alias_method_chain :setup_with_controller, :check_first
+            end
+          end
         end
       end
 
