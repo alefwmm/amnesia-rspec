@@ -96,7 +96,12 @@ module Amnesia
         while true do
           args = @pipe.get
           debug "Got: " + args.inspect if Amnesia::Config.debug
-          @target.send(*args)
+          begin
+            @target.send(*args)
+          rescue => ex
+            puts "[#{Process.pid}] Exception in reporter: " + ex.message
+            puts ex.backtrace
+          end
         end
       rescue ::Cod::ConnectionLost
       end
