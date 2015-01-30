@@ -6,10 +6,6 @@ module Amnesia
     # Kill old webkits that accumulate under Guard on dev stations..hacky hack hack
     `(uname -a |grep Darwin) && killall webkit_server`
 
-    # Headless is needed for CI
-    @headless = Headless.new(:display => Process.pid, :reuse => false)
-    @headless.start
-
     @webkit_sessions = {}
     @servers = {}
     @default_session = Capybara::Session.new(Capybara.default_driver, Capybara.app)
@@ -39,7 +35,7 @@ module Amnesia
   end
 
   def self.cleanup
-    @headless.destroy
+    Config.at_cleanup_block.try(:call)
   end
 
   def self.register_server(app, port)

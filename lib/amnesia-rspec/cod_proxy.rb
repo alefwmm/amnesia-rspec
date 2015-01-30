@@ -30,10 +30,18 @@ module Amnesia
       return if [:example_group_started, :example_group_finished].include?(args[0])
       # puts "Proxying: #{args[0]}"
       begin
-        @pipe.put(args)
+        begin
+          @pipe.put(args)
+        rescue TypeError
+          # There was a problem dumping something; try again, requesting the Example hack below to be more conservative
+          Thread.current[:amnesia_cod_safe_dump] = true
+          @pipe.put(args)
+        ensure
+          Thread.current[:amnesia_cod_safe_dump] = false
+        end
       rescue => ex
-        puts "[#{Process.pid}] Error putting: " + args.inspect
-        raise ex
+        puts "[#{Process.pid}] " + ex.message
+        puts "[#{Process.pid}] Amnesia could not report example result: " + args.inspect
       end
     end
 
@@ -50,21 +58,43 @@ module Amnesia
   end
 end
 
+# Used below to avoid serialization of unserializable exception instance vars
+class Amnesia::SerializableException < RuntimeError
+  def initialize(exception)
+    super(exception.message)
+    set_backtrace(exception.backtrace)
+  end
+end
+
 # Define serialization format for Examples to only contain stuff we care about, and avoid trying
 # to dump things like Procs that will raise exceptions
 class RSpec::Core::Example
   def marshal_dump
+    # Only stuff we really want
+    # Have to actually call [] for each key on @metadata, it's not a normal hash we can #slice
     metadata = [:description, :full_description, :execution_result, :file_path, :pending, :location].each_with_object({}) do |k, h|
       h[k] = @metadata[k]
     end
+
+    if @exception != metadata[:execution_result][:exception]
+      raise "Uhoh, guess that is not a valid assumption"
+    end
+
+    # Necessary to avoid Proc serialization error in @assigns ivar of AV::T::E; also seems more helpful
+    exception = @exception.is_a?(ActionView::Template::Error) ? @exception.original_exception : @exception
+
+    # Dumping failed once; try wrapping the exception, if any
+    if Thread.current[:amnesia_cod_safe_dump]
+      if exception
+        exception = Amnesia::SerializableException.new(exception)
+      end
+    end
+
+    metadata[:execution_result][:exception] = exception
+
     {
-        # Only stuff we really want
-        # Have to actually call [] for each key on @metadata, it's not a normal hash we can #slice
         metadata: metadata,
-
-        # Necessary to avoid Proc serialization error in @assigns ivar of AV::T::E; also seems more helpful
-        exception: @exception.is_a?(ActionView::Template::Error) ? @exception.original_exception : @exception,
-
+        exception: exception,
         example_group: example_group.to_s # Can't dump class
     } #.tap {|data| puts "Marshalled Example to: #{data.inspect}"}
   end
