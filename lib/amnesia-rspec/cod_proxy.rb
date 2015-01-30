@@ -26,7 +26,14 @@ module Cod
     def de(io)
       doc = io.gets
       if doc
-        Oj.load(doc, OPTIONS)
+        begin
+          Oj.load(doc, OPTIONS)
+        rescue => ex
+          puts "[#{Process.pid}] Error loading serialized report: #{doc}"
+          puts ex.message
+          puts ex.backtrace
+          nil
+        end
       else
         # Should this be happening automatically?
         raise ConnectionLost
@@ -103,7 +110,7 @@ module Amnesia
           args = @pipe.get
           debug "Got: " + args.inspect if Amnesia::Config.debug
           begin
-            @target.send(*args)
+            @target.send(*args) if args
           rescue => ex
             puts "[#{Process.pid}] Exception in reporter: " + ex.message
             puts ex.backtrace
