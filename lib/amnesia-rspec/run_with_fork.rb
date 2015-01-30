@@ -23,7 +23,7 @@ module Amnesia
                 $stderr = STDERR.reopen(Amnesia.output)
               end
               work.call
-            rescue => ex
+            rescue Exception => ex
               puts [ex.inspect, ex.backtrace].join("\n\t")
             ensure
               RunWithFork.perform_work(false) # Finish the last bit of registered work in the child
@@ -35,7 +35,7 @@ module Amnesia
         else
           begin
             work.call
-          rescue => ex
+          rescue Exception => ex
             puts [ex.inspect, ex.backtrace].join("\n\t")
           ensure
             RunWithFork.perform_work(false) # Finish the last bit of registered work in the child

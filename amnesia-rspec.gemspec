@@ -21,7 +21,7 @@ Gem::Specification.new do |s|
   # specify any dependencies here; for example:
   # s.add_development_dependency "rspec"
   s.add_runtime_dependency "cod", '0.6.0'
-  s.add_runtime_dependency "msgpack", '~> 0.5.10'
+  s.add_runtime_dependency "oj", '>= 2.9.9'
   s.add_runtime_dependency "unicorn", '4.0.1'
   s.add_runtime_dependency "rspec-core", '~> 2.9'
   s.add_runtime_dependency "capybara-webkit", '>= 0.13'

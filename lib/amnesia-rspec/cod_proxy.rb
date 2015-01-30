@@ -1,38 +1,58 @@
 require 'cod'
-require 'msgpack'
+require 'oj'
 
 module Cod
-  class MsgpackSerializer
+  class OjSerializer
+    include Amnesia::Logging
+
+    OPTIONS = {
+        indent: 0,
+        circular: false,
+        auto_define: false,
+        symbol_keys: true,
+        escape_mode: nil,
+        class_cache: true,
+        mode: :object,
+        create_id: nil,
+        use_to_json: false,
+        quirks_mode: true,
+        nilnil: false
+    }
+
     def en(obj)
-      MessagePack.dump(obj)
+      Oj.dump(obj, OPTIONS)
     end
 
     def de(io)
-      MessagePack.load(io)
+      Oj.load(io.gets, OPTIONS)
     end
   end
 end
 
 module Amnesia
   class CodProxy
+    include Logging
+
     def initialize(target)
-      #puts "[#{Process.pid}] Building proxy for #{target.inspect}"
+      debug "Building proxy for #{target.inspect}"
       @target = target
-      @pipe = ::Cod::Pipe.new(Cod::MsgpackSerializer.new, ::IO.pipe("binary"))
+      @pipe = ::Cod::Pipe.new(Cod::OjSerializer.new, ::IO.pipe("binary"))
       @pipe.instance_eval do
         class << @pipe # The Cod::IOPair instance for this Cod::Pipe
+          include Amnesia::Logging
+
           def write(buf)
-            #puts "[#{::Process.pid}] requesting write"
+            debug "requesting write for: #{buf}" if Config.debug
             Amnesia.safe_write do
-              #puts "[#{::Process.pid}] executing write"
+              debug "executing write"
 
               # force_encoding should be unneccessary because the pipe should be binary, but Rails is screwing it
               # up somehow (works fine under straight ruby console)
-              super(buf.force_encoding("UTF-8"))
+              super(buf.force_encoding("UTF-8") + "\n") # Need newline to turn JSON stream into distinct messages
 
-              #puts "[#{::Process.pid}] done write"
+              debug "done write"
             end
-            #puts "[#{::Process.pid}] released write"
+            debug "released write"
           end
         end
       end
@@ -43,16 +63,29 @@ module Amnesia
       return if [:example_group_started, :example_group_finished].include?(args[0])
       # puts "Proxying: #{args[0]}"
       begin
-        begin
-          @pipe.put(args)
-        rescue TypeError
-          # There was a problem dumping something; try again, requesting the Example hack below to be more conservative
-          Thread.current[:amnesia_cod_safe_dump] = true
-          @pipe.put(args)
-        ensure
-          Thread.current[:amnesia_cod_safe_dump] = false
+        args.map! do |obj|
+          if obj.is_a? ::RSpec::Core::Example
+            # Only stuff we really want
+            # Have to actually call [] for each key on @metadata, it's not a normal hash we can #slice
+            metadata = [:description, :full_description, :execution_result, :file_path, :pending, :location].each_with_object({}) do |k, h|
+              h[k] = obj.metadata[k]
+            end
+            dummy_example = ::RSpec::Core::Example.allocate
+            dummy_example.instance_variable_set('@metadata', metadata)
+            %w[exception example_group_class].each do |var|
+              var = "@#{var}"
+              dummy_example.instance_variable_set(var, obj.instance_variable_get(var))
+            end
+
+            dummy_example
+          else
+            obj
+          end
         end
-      rescue => ex
+
+        @pipe.put(args)
+
+      rescue Exception => ex
         puts "[#{Process.pid}] " + ex.message
         puts "[#{Process.pid}] Amnesia could not report example result: " + args.inspect
       end
@@ -62,7 +95,7 @@ module Amnesia
       begin
         while true do
           args = @pipe.get
-          #puts "[#{Process.pid}] Got: " + args.inspect
+          debug "Got: " + args.inspect if Amnesia::Config.debug
           @target.send(*args)
         end
       rescue ::Cod::ConnectionLost
@@ -71,60 +104,3 @@ module Amnesia
   end
 end
 
-# Used below to avoid serialization of unserializable exception instance vars
-class Amnesia::SerializableException < RuntimeError
-  def initialize(exception)
-    super(exception.message)
-    set_backtrace(exception.backtrace)
-  end
-end
-
-# Define serialization format for Examples to only contain stuff we care about, and avoid trying
-# to dump things like Procs that will raise exceptions
-class RSpec::Core::Example
-  def to_msgpack(options = {})
-    # Only stuff we really want
-    # Have to actually call [] for each key on @metadata, it's not a normal hash we can #slice
-    metadata = [:description, :full_description, :execution_result, :file_path, :pending, :location].each_with_object({}) do |k, h|
-      h[k] = @metadata[k]
-    end
-
-    if @exception != metadata[:execution_result][:exception]
-      raise "Uhoh, guess that is not a valid assumption"
-    end
-
-    # Necessary to avoid Proc serialization error in @assigns ivar of AV::T::E; also seems more helpful
-    exception = @exception.is_a?(ActionView::Template::Error) ? @exception.original_exception : @exception
-
-    # Dumping failed once; try wrapping the exception, if any
-    if Thread.current[:amnesia_cod_safe_dump]
-      if exception
-        exception = Amnesia::SerializableException.new(exception)
-      end
-    end
-
-    metadata[:execution_result][:exception] = exception
-
-    {
-        metadata: metadata,
-        exception: exception,
-        example_group: example_group.to_s # Can't dump class
-    }.to_msgpack #.tap {|data| puts "Marshalled Example to: #{data.inspect}"}
-  end
-
-  def marshal_load(data)
-    @example_group_class = data.delete(:example_group).constantize if data[:example_group]
-    # puts "Loading keys: #{data.keys}"
-    # puts "Loading values: #{data.values}"
-    data.each_pair do |k, v|
-      # puts "Loading k: #{k}"
-      # puts "Loading v: #{v}"
-      begin
-        instance_variable_set("@#{k}", v)
-      rescue NameError
-        puts "WTF? Disallowed instance variable name in serialized Example: #{k}"
-        puts "Full data: #{data.inspect}"
-      end
-    end
-  end
-end

@@ -27,6 +27,16 @@ end
 
 module ActiveRecord
   module ConnectionAdapters
+    module SchemaStatements
+      # No point in setting up indexes that don't change behavior; we're not going to have a ton of objects, and it slows down startup
+      def add_index_with_or_not(table_name, column_name, options = {})
+        if options[:unique]
+          add_index_without_or_not(table_name, column_name, options)
+        end
+      end
+      alias_method_chain :add_index, :or_not
+    end
+
     class Mysql2Adapter
       # We can only have one client in the process when using embedded server
       def self.new(*args)
