@@ -1,11 +1,24 @@
 require 'cod'
+require 'msgpack'
+
+module Cod
+  class MsgpackSerializer
+    def en(obj)
+      MessagePack.dump(obj)
+    end
+
+    def de(io)
+      MessagePack.load(io)
+    end
+  end
+end
 
 module Amnesia
   class CodProxy
     def initialize(target)
       #puts "[#{Process.pid}] Building proxy for #{target.inspect}"
       @target = target
-      @pipe = ::Cod::Pipe.new(nil, ::IO.pipe("binary"))
+      @pipe = ::Cod::Pipe.new(Cod::MsgpackSerializer.new, ::IO.pipe("binary"))
       @pipe.instance_eval do
         class << @pipe # The Cod::IOPair instance for this Cod::Pipe
           def write(buf)
@@ -69,7 +82,7 @@ end
 # Define serialization format for Examples to only contain stuff we care about, and avoid trying
 # to dump things like Procs that will raise exceptions
 class RSpec::Core::Example
-  def marshal_dump
+  def to_msgpack(options = {})
     # Only stuff we really want
     # Have to actually call [] for each key on @metadata, it's not a normal hash we can #slice
     metadata = [:description, :full_description, :execution_result, :file_path, :pending, :location].each_with_object({}) do |k, h|
@@ -96,7 +109,7 @@ class RSpec::Core::Example
         metadata: metadata,
         exception: exception,
         example_group: example_group.to_s # Can't dump class
-    } #.tap {|data| puts "Marshalled Example to: #{data.inspect}"}
+    }.to_msgpack #.tap {|data| puts "Marshalled Example to: #{data.inspect}"}
   end
 
   def marshal_load(data)
