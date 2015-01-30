@@ -25,6 +25,10 @@ module Amnesia
     end
 
     def self.add(file)
+      loaded_from = $LOAD_PATH.find {|p| file.include?(p)}
+      if loaded_from
+        file.slice!(loaded_from + '/') # Reduce to relative path
+      end
       str = "require '#{file}'"
       File.open(@filename, 'a+') do |f|
         f.flock(File::LOCK_EX)
