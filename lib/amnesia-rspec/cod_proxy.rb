@@ -7,7 +7,7 @@ module Cod
 
     OPTIONS = {
         indent: 0,
-        circular: false,
+        circular: true,
         auto_define: false,
         symbol_keys: true,
         escape_mode: nil,
@@ -24,7 +24,13 @@ module Cod
     end
 
     def de(io)
-      Oj.load(io.gets, OPTIONS)
+      doc = io.gets
+      if doc
+        Oj.load(doc, OPTIONS)
+      else
+        # Should this be happening automatically?
+        raise ConnectionLost
+      end
     end
   end
 end
