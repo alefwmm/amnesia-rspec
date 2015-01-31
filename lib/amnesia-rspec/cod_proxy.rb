@@ -29,7 +29,7 @@ module Cod
         begin
           Oj.load(doc, OPTIONS)
         rescue => ex
-          puts "[#{Process.pid}] Error loading serialized report: #{doc}"
+          puts "[#{::Process.pid}] Error loading serialized report: #{doc}"
           puts ex.message
           puts ex.backtrace
           nil
